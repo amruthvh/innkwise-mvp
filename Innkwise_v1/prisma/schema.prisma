@@ -1,0 +1,49 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String   @id @default(uuid())
+  email            String   @unique
+  passwordHash     String?
+  planType         Plan     @default(FREE)
+  stripeCustomerId String?
+  createdAt        DateTime @default(now())
+  scripts          Script[]
+  usage            Usage[]
+}
+
+model Script {
+  id        String   @id @default(uuid())
+  userId    String
+  topic     String
+  audience  String
+  tone      String
+  length    Int
+  output    Json
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Usage {
+  id     String @id @default(uuid())
+  userId String
+  month  String
+  count  Int    @default(0)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, month])
+}
+
+enum Plan {
+  FREE
+  CREATOR
+  PRO
+}
