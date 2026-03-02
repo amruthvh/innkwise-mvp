@@ -101,7 +101,7 @@ Return ONLY valid JSON:
   "hooks": []
 }
 
-Generate EXACTLY 5 high-retention hooks for a YouTube video.
+Generate EXACTLY 3 high-retention hooks for a YouTube video.
 Rules:
 - Each hook under 20 words
 - Punchy and curiosity-driven
