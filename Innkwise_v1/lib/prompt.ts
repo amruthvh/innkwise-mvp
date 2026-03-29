@@ -47,13 +47,27 @@ Return array of strings only.`;
 }
 
 export function buildRewritePrompt(section: string, tone: string, existingText: string): string {
-  return `Rewrite this section to increase emotional impact and authority.
+  return `You are an elite content editor specializing in improving audience retention and clarity.
 
-Section Type: ${section}
-Tone: ${tone}
+Your task is to refine the following content.
 
-Text:
+IMPORTANT:
+- Do NOT change the original tone or style of the content
+- Do NOT change the core meaning or message
+- Do NOT make it overly dramatic or exaggerated
+
+Your goal is to subtly improve the content by:
+- Making it clearer and easier to understand
+- Improving flow and readability
+- Increasing engagement and retention
+- Adding slight emotional depth where natural
+- Making sentences more impactful and less generic
+
+Think like a professional editor polishing a script, not rewriting it.
+
+ORIGINAL CONTENT:
 ${existingText}
 
-Return string only.`;
+OUTPUT:
+Return only the refined version.`;
 }

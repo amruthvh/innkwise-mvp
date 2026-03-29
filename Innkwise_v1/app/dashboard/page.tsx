@@ -27,6 +27,29 @@ type ScriptResult = {
   };
 };
 
+type VisibleSection = {
+  title: string;
+  content?: string;
+  action?: ReactNode;
+  refineKey?: string;
+  refineSection?: string;
+  refineSourceText?: string;
+  onRefineApply?: (refinedText: string) => void;
+};
+
+type ThumbnailResult = {
+  concept: string;
+  text: string;
+  visual_style: string;
+  composition: string;
+  image: string | null;
+};
+
+type ThumbnailField = {
+  label: string;
+  value: string;
+};
+
 export default function Dashboard() {
   const [topic, setTopic] = useState("");
   const [audience, setAudience] = useState("");
@@ -39,12 +62,22 @@ export default function Dashboard() {
   const [result, setResult] = useState<ScriptResult | null>(null);
   const [visibleSectionCount, setVisibleSectionCount] = useState(0);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
+  const [refiningKey, setRefiningKey] = useState<string | null>(null);
+  const [refineError, setRefineError] = useState<string | null>(null);
+  const [thumbnail, setThumbnail] = useState<ThumbnailResult | null>(null);
+  const [thumbLoading, setThumbLoading] = useState(false);
+  const [visibleThumbnailFieldCount, setVisibleThumbnailFieldCount] = useState(0);
+  const [showThumbnailImage, setShowThumbnailImage] = useState(false);
 
   const generateScript = async () => {
     try {
       setLoading(true);
       setVisibleSectionCount(0);
       setResult(null);
+      setRefineError(null);
+      setThumbnail(null);
+      setVisibleThumbnailFieldCount(0);
+      setShowThumbnailImage(false);
       const res = await axios.post("/api/generate-script", {
         topic,
         audience,
@@ -55,7 +88,6 @@ export default function Dashboard() {
         includeCaseStudy
       });
 
-      // Supports either direct script payload or { id, output } API wrapper.
       setResult((res.data?.output ?? res.data) as ScriptResult);
       setVisibleSectionCount(1);
     } catch {
@@ -69,6 +101,7 @@ export default function Dashboard() {
     if (!result?.hooks?.length) return;
 
     try {
+      setRefineError(null);
       const res = await axios.post("/api/regenerate-hooks", {
         topic,
         audience,
@@ -84,19 +117,96 @@ export default function Dashboard() {
     }
   };
 
+  const refineSection = async (
+    key: string,
+    section: string,
+    existingText: string,
+    applyRefinedText: (refinedText: string) => void
+  ) => {
+    try {
+      setRefiningKey(key);
+      setRefineError(null);
+
+      const res = await axios.post("/api/rewrite-section", {
+        section,
+        existingText,
+        tone
+      });
+
+      const refinedText = typeof res.data?.text === "string" ? res.data.text.trim() : "";
+      if (!refinedText) {
+        throw new Error(
+          typeof res.data?.error === "string" ? res.data.error : "Refine returned empty content."
+        );
+      }
+
+      applyRefinedText(refinedText);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : `Unable to refine "${section}" right now.`;
+      setRefineError(message);
+    } finally {
+      setRefiningKey(null);
+    }
+  };
+
   const sections = (() => {
-    if (!result) return [] as Array<{ title: string; content?: string; action?: ReactNode }>;
+    if (!result) return [] as VisibleSection[];
 
     if (videoType === "shorts") {
       return [
-        { title: "Hook", content: result.hook },
-        { title: "Pattern Interrupt", content: result.pattern_interrupt },
-        { title: "Main Script", content: result.main_script },
-        { title: "CTA", content: result.cta }
-      ];
+        {
+          title: "Hook",
+          content: result.hook,
+          refineKey: "shorts-hook",
+          refineSection: "Hook",
+          refineSourceText: result.hook,
+          onRefineApply: (refinedText: string) =>
+            setResult((prev) => ({
+              ...(prev ?? {}),
+              hook: refinedText
+            }))
+        },
+        {
+          title: "Pattern Interrupt",
+          content: result.pattern_interrupt,
+          refineKey: "shorts-pattern_interrupt",
+          refineSection: "Pattern Interrupt",
+          refineSourceText: result.pattern_interrupt,
+          onRefineApply: (refinedText: string) =>
+            setResult((prev) => ({
+              ...(prev ?? {}),
+              pattern_interrupt: refinedText
+            }))
+        },
+        {
+          title: "Main Script",
+          content: result.main_script,
+          refineKey: "shorts-main_script",
+          refineSection: "Main Script",
+          refineSourceText: result.main_script,
+          onRefineApply: (refinedText: string) =>
+            setResult((prev) => ({
+              ...(prev ?? {}),
+              main_script: refinedText
+            }))
+        },
+        {
+          title: "CTA",
+          content: result.cta,
+          refineKey: "shorts-cta",
+          refineSection: "CTA",
+          refineSourceText: result.cta,
+          onRefineApply: (refinedText: string) =>
+            setResult((prev) => ({
+              ...(prev ?? {}),
+              cta: refinedText
+            }))
+        }
+      ].filter((section) => section.content && section.content.trim().length > 0) as VisibleSection[];
     }
 
-    const longFormSections: Array<{ title: string; content?: string; action?: ReactNode }> = [
+    const longFormSections: VisibleSection[] = [
       {
         title: "Hooks",
         content: toBulletText(result.hooks),
@@ -120,33 +230,142 @@ export default function Dashboard() {
         const item = result.script_timeline[idx];
         longFormSections.push({
           title: `${item.time_range ?? "Timeline"} - ${item.section_title ?? "Section"}`,
-          content: normalizeBulletFormatting(item.content ?? "")
+          content: normalizeBulletFormatting(item.content ?? ""),
+          refineKey: `timeline-${idx}`,
+          refineSection: item.section_title ?? "Section",
+          refineSourceText: item.content ?? "",
+          onRefineApply: (refinedText: string) =>
+            setResult((prev) => ({
+              ...(prev ?? {}),
+              script_timeline: prev?.script_timeline?.map((section, sectionIndex) =>
+                sectionIndex === idx ? { ...section, content: refinedText } : section
+              )
+            }))
         });
       }
     }
 
     longFormSections.push(
-      { title: "Pattern Interrupt", content: normalizeBulletFormatting(result.script?.pattern_interrupt ?? "") },
-      { title: "Problem Setup", content: normalizeBulletFormatting(result.script?.problem_setup ?? "") },
+      {
+        title: "Pattern Interrupt",
+        content: normalizeBulletFormatting(result.script?.pattern_interrupt ?? ""),
+        refineKey: "legacy-pattern_interrupt",
+        refineSection: "Pattern Interrupt",
+        refineSourceText: result.script?.pattern_interrupt ?? "",
+        onRefineApply: (refinedText: string) =>
+          setResult((prev) => ({
+            ...(prev ?? {}),
+            script: {
+              ...(prev?.script ?? {}),
+              pattern_interrupt: refinedText
+            }
+          }))
+      },
+      {
+        title: "Problem Setup",
+        content: normalizeBulletFormatting(result.script?.problem_setup ?? ""),
+        refineKey: "legacy-problem_setup",
+        refineSection: "Problem Setup",
+        refineSourceText: result.script?.problem_setup ?? "",
+        onRefineApply: (refinedText: string) =>
+          setResult((prev) => ({
+            ...(prev ?? {}),
+            script: {
+              ...(prev?.script ?? {}),
+              problem_setup: refinedText
+            }
+          }))
+      },
       {
         title: "Psychological Explanation",
-        content: normalizeBulletFormatting(result.script?.psychological_explanation ?? "")
+        content: normalizeBulletFormatting(result.script?.psychological_explanation ?? ""),
+        refineKey: "legacy-psychological_explanation",
+        refineSection: "Psychological Explanation",
+        refineSourceText: result.script?.psychological_explanation ?? "",
+        onRefineApply: (refinedText: string) =>
+          setResult((prev) => ({
+            ...(prev ?? {}),
+            script: {
+              ...(prev?.script ?? {}),
+              psychological_explanation: refinedText
+            }
+          }))
       },
-      { title: "Case Study", content: normalizeBulletFormatting(result.script?.case_study ?? "") },
-      { title: "Practical Steps", content: normalizeBulletFormatting(result.script?.practical_steps ?? "") },
+      {
+        title: "Case Study",
+        content: normalizeBulletFormatting(result.script?.case_study ?? ""),
+        refineKey: "legacy-case_study",
+        refineSection: "Case Study",
+        refineSourceText: result.script?.case_study ?? "",
+        onRefineApply: (refinedText: string) =>
+          setResult((prev) => ({
+            ...(prev ?? {}),
+            script: {
+              ...(prev?.script ?? {}),
+              case_study: refinedText
+            }
+          }))
+      },
+      {
+        title: "Practical Steps",
+        content: normalizeBulletFormatting(result.script?.practical_steps ?? ""),
+        refineKey: "legacy-practical_steps",
+        refineSection: "Practical Steps",
+        refineSourceText: result.script?.practical_steps ?? "",
+        onRefineApply: (refinedText: string) =>
+          setResult((prev) => ({
+            ...(prev ?? {}),
+            script: {
+              ...(prev?.script ?? {}),
+              practical_steps: refinedText
+            }
+          }))
+      },
       {
         title: "Engagement Trigger",
-        content: normalizeBulletFormatting(result.script?.engagement_trigger ?? "")
+        content: normalizeBulletFormatting(result.script?.engagement_trigger ?? ""),
+        refineKey: "legacy-engagement_trigger",
+        refineSection: "Engagement Trigger",
+        refineSourceText: result.script?.engagement_trigger ?? "",
+        onRefineApply: (refinedText: string) =>
+          setResult((prev) => ({
+            ...(prev ?? {}),
+            script: {
+              ...(prev?.script ?? {}),
+              engagement_trigger: refinedText
+            }
+          }))
       },
-      { title: "CTA", content: normalizeBulletFormatting(result.script?.cta ?? "") }
+      {
+        title: "CTA",
+        content: normalizeBulletFormatting(result.script?.cta ?? ""),
+        refineKey: "legacy-cta",
+        refineSection: "CTA",
+        refineSourceText: result.script?.cta ?? "",
+        onRefineApply: (refinedText) =>
+          setResult((prev) => ({
+            ...(prev ?? {}),
+            script: {
+              ...(prev?.script ?? {}),
+              cta: refinedText
+            }
+          }))
+      }
     );
 
-    return longFormSections;
+    return longFormSections.filter(
+      (section) => section.content && section.content.trim().length > 0
+    ) as VisibleSection[];
   })();
 
+  const exportSections = sections.map((section) => ({
+    title: section.title,
+    content: section.content
+  }));
+
   const copyEntireScript = async () => {
-    if (!sections.length) return;
-    const plainText = buildPlainTextScript(sections);
+    if (!exportSections.length) return;
+    const plainText = buildPlainTextScript(exportSections);
     try {
       await navigator.clipboard.writeText(plainText);
       setCopyStatus("copied");
@@ -157,8 +376,8 @@ export default function Dashboard() {
   };
 
   const downloadDocx = () => {
-    if (!sections.length) return;
-    const blob = createDocxBlobFromSections(sections);
+    if (!exportSections.length) return;
+    const blob = createDocxBlobFromSections(exportSections);
     const fileName = `${safeFilename(topic || "script")}.docx`;
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -172,6 +391,43 @@ export default function Dashboard() {
 
   const revealNextSection = () => {
     setVisibleSectionCount((current) => (current < sections.length ? current + 1 : current));
+  };
+
+  const generateThumbnail = async () => {
+    try {
+      setThumbLoading(true);
+      setVisibleThumbnailFieldCount(0);
+      setShowThumbnailImage(false);
+      setThumbnail(null);
+
+      const res = await axios.post("/api/generate-thumbnail", {
+        topic
+      });
+
+      setThumbnail(res.data as ThumbnailResult);
+      setVisibleThumbnailFieldCount(1);
+    } catch {
+      alert("Thumbnail generation failed");
+    } finally {
+      setThumbLoading(false);
+    }
+  };
+
+  const thumbnailFields: ThumbnailField[] = thumbnail
+    ? [
+        { label: "Concept", value: thumbnail.concept },
+        { label: "Text", value: thumbnail.text },
+        { label: "Style", value: thumbnail.visual_style },
+        { label: "Composition", value: thumbnail.composition }
+      ].filter((field) => field.value.trim().length > 0)
+    : [];
+
+  const revealNextThumbnailField = () => {
+    setVisibleThumbnailFieldCount((current) => {
+      if (current < thumbnailFields.length) return current + 1;
+      setShowThumbnailImage(true);
+      return current;
+    });
   };
 
   return (
@@ -271,6 +527,12 @@ export default function Dashboard() {
           </button>
         </div>
 
+        {refineError ? (
+          <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            {refineError}
+          </div>
+        ) : null}
+
         {result && (
           <div className="space-y-6">
             <div className="flex flex-wrap gap-3">
@@ -291,9 +553,57 @@ export default function Dashboard() {
                 title={section.title}
                 content={section.content}
                 action={section.action}
+                refineKey={section.refineKey}
+                isRefining={refiningKey === section.refineKey}
+                onRefine={() => {
+                  if (
+                    !section.refineKey ||
+                    !section.refineSection ||
+                    !section.refineSourceText ||
+                    !section.onRefineApply
+                  ) {
+                    return;
+                  }
+
+                  void refineSection(
+                    section.refineKey,
+                    section.refineSection,
+                    section.refineSourceText,
+                    section.onRefineApply
+                  );
+                }}
                 onDone={idx === visibleSectionCount - 1 ? revealNextSection : undefined}
               />
             ))}
+
+            <button
+              onClick={generateThumbnail}
+              disabled={thumbLoading || !topic.trim()}
+              className="bg-white text-black px-4 py-2 rounded disabled:opacity-50"
+            >
+              Generate Thumbnail
+            </button>
+
+            {thumbLoading ? <p>Designing thumbnail concept...</p> : null}
+
+            {thumbnail ? (
+              <div className="bg-zinc-900 p-6 rounded-xl space-y-4">
+                <h2 className="text-xl font-bold">Thumbnail Idea</h2>
+
+                {thumbnailFields.slice(0, visibleThumbnailFieldCount).map((field, index) => (
+                  <ThumbnailLine
+                    key={field.label}
+                    label={field.label}
+                    value={field.value}
+                    onDone={index === visibleThumbnailFieldCount - 1 ? revealNextThumbnailField : undefined}
+                  />
+                ))}
+
+                {thumbnail.image && showThumbnailImage ? (
+                  <img src={thumbnail.image} alt="thumbnail" className="rounded-lg" />
+                ) : null}
+              </div>
+            ) : null}
           </div>
         )}
       </div>
@@ -301,15 +611,39 @@ export default function Dashboard() {
   );
 }
 
+function ThumbnailLine({
+  label,
+  value,
+  onDone
+}: {
+  label: string;
+  value: string;
+  onDone?: () => void;
+}) {
+  const typed = useTypewriter(value, 10, onDone);
+
+  return (
+    <p>
+      <strong>{label}:</strong> {typed}
+    </p>
+  );
+}
+
 function Section({
   title,
   content,
   action,
+  refineKey,
+  isRefining,
+  onRefine,
   onDone
 }: {
   title: string;
   content?: string;
   action?: ReactNode;
+  refineKey?: string;
+  isRefining?: boolean;
+  onRefine?: () => void;
   onDone?: () => void;
 }) {
   if (!content) return null;
@@ -319,7 +653,19 @@ function Section({
     <div className="bg-zinc-900 p-6 rounded-xl">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-xl font-bold">{title}</h2>
-        {action}
+        <div className="flex items-center gap-3">
+          {refineKey ? (
+            <button
+              type="button"
+              onClick={onRefine}
+              disabled={Boolean(isRefining)}
+              className="text-sm bg-zinc-800 px-3 py-1 rounded disabled:opacity-50"
+            >
+              {isRefining ? "Refining..." : "Refine"}
+            </button>
+          ) : null}
+          {action}
+        </div>
       </div>
       <MarkdownContent text={typed} />
     </div>
@@ -390,7 +736,9 @@ function buildPlainTextScript(sections: Array<{ title: string; content?: string 
 }
 
 function safeFilename(value: string) {
-  return value.trim().replace(/[^a-zA-Z0-9-_ ]+/g, "").replace(/\s+/g, "_").slice(0, 60) || "script";
+  return (
+    value.trim().replace(/[^a-zA-Z0-9-_ ]+/g, "").replace(/\s+/g, "_").slice(0, 60) || "script"
+  );
 }
 
 function normalizeHtmlToStructuredText(input: string) {
