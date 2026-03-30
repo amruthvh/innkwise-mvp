@@ -1,5 +1,4 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getOpenAIClient } from "@/lib/openai";
 import { buildRewritePrompt } from "@/lib/prompt";
 
 type Body = {
@@ -19,52 +18,7 @@ function isValidBody(body: unknown): body is Body {
   );
 }
 
-function extractJsonBlock(text: string): string {
-  const jsonStart = text.indexOf("{");
-  const jsonEnd = text.lastIndexOf("}") + 1;
-
-  if (jsonStart === -1 || jsonEnd <= jsonStart) {
-    throw new Error("Model response did not contain a JSON object.");
-  }
-
-  return text.slice(jsonStart, jsonEnd);
-}
-
-function cleanJsonString(jsonString: string): string {
-  return jsonString
-    .replace(/,\s*([}\]])/g, "$1")
-    .replace(/[\u0000-\u001F]+/g, " ")
-    .trim();
-}
-
-function extractRefinedText(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed) return "";
-
-  try {
-    const parsed = JSON.parse(cleanJsonString(extractJsonBlock(trimmed))) as {
-      text?: unknown;
-      content?: unknown;
-    };
-
-    if (typeof parsed.text === "string" && parsed.text.trim()) {
-      return parsed.text.trim();
-    }
-
-    if (typeof parsed.content === "string" && parsed.content.trim()) {
-      return parsed.content.trim();
-    }
-  } catch {
-    // Fall through to plain-text cleanup.
-  }
-
-  return trimmed
-    .replace(/^```(?:json|text)?/i, "")
-    .replace(/```$/i, "")
-    .trim();
-}
-
-async function callHuggingFace(prompt: string): Promise<string> {
+async function callHuggingFace(prompt: string) {
   const token = process.env.HF_API_TOKEN;
   if (!token) {
     throw new Error("HF_API_TOKEN is missing.");
@@ -79,14 +33,8 @@ async function callHuggingFace(prompt: string): Promise<string> {
     },
     body: JSON.stringify({
       model,
-      messages: [
-        {
-          role: "system",
-          content: "Return valid JSON only in the format {\"text\":\"...\"} with no extra commentary."
-        },
-        { role: "user", content: prompt }
-      ],
-      temperature: 0.4,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.7,
       max_tokens: 1200
     })
   });
@@ -103,6 +51,74 @@ async function callHuggingFace(prompt: string): Promise<string> {
   return data.choices?.[0]?.message?.content ?? "";
 }
 
+function extractRefinedText(raw: string) {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+
+  const cleaned = trimmed
+    .replace(/^```(?:json|markdown|md|text)?\s*/i, "")
+    .replace(/```$/i, "")
+    .trim();
+
+  const candidates = [trimmed, cleaned];
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      const extracted = unwrapTextValue(parsed);
+      if (extracted) return extracted;
+    } catch {
+      // Try the next strategy.
+    }
+
+    try {
+      const jsonStart = candidate.indexOf("{");
+      const jsonEnd = candidate.lastIndexOf("}");
+      if (jsonStart !== -1 && jsonEnd > jsonStart) {
+        const parsed = JSON.parse(candidate.slice(jsonStart, jsonEnd + 1)) as unknown;
+        const extracted = unwrapTextValue(parsed);
+        if (extracted) return extracted;
+      }
+    } catch {
+      // Fall through to regex extraction.
+    }
+
+    const match = candidate.match(/"text"\s*:\s*"([\s\S]*?)"\s*}/i);
+    if (match?.[1]) {
+      try {
+        const decoded = JSON.parse(`"${match[1]}"`) as string;
+        if (decoded.trim()) return decoded.trim();
+      } catch {
+        if (match[1].trim()) return match[1].trim();
+      }
+    }
+  }
+
+  return cleaned
+    .replace(/^text\s*:\s*/i, "")
+    .replace(/^{\s*"text"\s*:\s*/i, "")
+    .replace(/}\s*$/i, "")
+    .replace(/^"|"$/g, "")
+    .trim();
+}
+
+function unwrapTextValue(value: unknown): string {
+  if (!value) return "";
+
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (typeof value === "object" && "text" in value) {
+    const textValue = (value as { text?: unknown }).text;
+    if (typeof textValue === "string") {
+      return textValue.trim();
+    }
+  }
+
+  return "";
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -113,45 +129,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const prompt = buildRewritePrompt(req.body.section, req.body.tone, req.body.existingText);
-    const hasOpenAIKey = Boolean(process.env.OPENAI_API_KEY);
-
-    if (hasOpenAIKey) {
-      const response = await getOpenAIClient().responses.create({
-        model: "gpt-4.1-mini",
-        input: [
-          {
-            role: "system",
-            content: "Return valid JSON matching the requested schema. Do not include extra commentary."
-          },
-          { role: "user", content: prompt }
-        ],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "rewrite_response",
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                text: { type: "string" }
-              },
-              required: ["text"]
-            },
-            strict: true
-          }
-        }
-      });
-
-      const parsed = JSON.parse(response.output_text) as { text: string };
-      return res.status(200).json({ text: parsed.text });
+    if (process.env.MOCK_GENERATE_SCRIPT === "true") {
+      return res.status(200).json({ text: req.body.existingText });
     }
+
+    const prompt = `${buildRewritePrompt(req.body.section, req.body.tone, req.body.existingText)}
+
+Return ONLY valid JSON:
+{
+  "text": ""
+}
+
+Rules:
+- Preserve the original meaning of the section
+- Improve clarity, authority, retention, and flow
+- Keep markdown formatting when useful
+- Do not add commentary outside the JSON object`;
 
     const raw = await callHuggingFace(prompt);
     const text = extractRefinedText(raw);
 
     if (!text) {
-      throw new Error("Refine response was empty.");
+      return res.status(502).json({ error: "Failed to refine section." });
     }
 
     return res.status(200).json({ text });
