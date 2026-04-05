@@ -14,6 +14,24 @@ npm install
 cp .env.example .env
 ```
 
+For Google sign-in in local development, make sure these values are present in `.env.local`:
+```bash
+NEXTAUTH_URL=http://localhost:3000
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+```
+
+In Google Cloud Console, the OAuth client must include:
+```text
+Authorized JavaScript origins:
+http://localhost:3000
+
+Authorized redirect URIs:
+http://localhost:3000/api/auth/callback/google
+```
+
+If you run the app on a different port, update both `NEXTAUTH_URL` and the Google OAuth redirect URI to match exactly.
+
 3. Run Prisma
 ```bash
 npx prisma generate

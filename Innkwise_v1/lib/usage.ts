@@ -1,5 +1,6 @@
-import { Plan } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+
+export type Plan = "FREE" | "CREATOR" | "PRO";
 
 export const PLAN_LIMITS: Record<Plan, number> = {
   FREE: 3,

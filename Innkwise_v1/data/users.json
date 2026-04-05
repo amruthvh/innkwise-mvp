@@ -1,0 +1,42 @@
+[
+  {
+    "id": "1775142303520-avx90isx",
+    "email": "phone.7760637138@innkwise.local",
+    "planType": "FREE",
+    "stripeCustomerId": null,
+    "createdAt": "2026-04-02T15:05:03.520Z",
+    "passwordHash": "4d3ae35740ecbaaa076f8349772d95f0f8a3913b62fab78f0947f52f8021dbbb",
+    "resetPasswordToken": null,
+    "resetPasswordExpiresAt": null
+  },
+  {
+    "id": "1775365142319-gdhe0iwo",
+    "email": "deekshithomkar@gmail.com",
+    "planType": "FREE",
+    "stripeCustomerId": null,
+    "createdAt": "2026-04-05T04:59:02.320Z",
+    "passwordHash": "a61b430575928a3541f08dae4192dcf4c0b959d5138b20190287b34881cb8528",
+    "resetPasswordToken": null,
+    "resetPasswordExpiresAt": null
+  },
+  {
+    "id": "1775366597242-qvzek6y6",
+    "email": "phone.7090023371@innkwise.local",
+    "planType": "FREE",
+    "stripeCustomerId": null,
+    "createdAt": "2026-04-05T05:23:17.242Z",
+    "passwordHash": "73ee98b9f7c42146e7dbe2f3366df5abfa1e018721205fa1c47ded84f5f2c45f",
+    "resetPasswordToken": "efac18ed308a4e2f096ea11291b408b5a572c9501e41c4d923bacfe36a8ad514",
+    "resetPasswordExpiresAt": "2026-04-05T06:07:46.643Z"
+  },
+  {
+    "id": "1775367077611-z82jlege",
+    "email": "phone.9110491851@innkwise.local",
+    "planType": "FREE",
+    "stripeCustomerId": null,
+    "createdAt": "2026-04-05T05:31:17.611Z",
+    "passwordHash": "5e491ca8148979c4a7866526b6e9a1d7dd80ffcb91d98e800324cc8459f1822b",
+    "resetPasswordToken": null,
+    "resetPasswordExpiresAt": null
+  }
+]

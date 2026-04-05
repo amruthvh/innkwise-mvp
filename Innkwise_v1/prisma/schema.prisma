@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -11,7 +11,7 @@ model User {
   id               String   @id @default(uuid())
   email            String   @unique
   passwordHash     String?
-  planType         Plan     @default(FREE)
+  planType         String   @default("FREE")
   stripeCustomerId String?
   createdAt        DateTime @default(now())
   scripts          Script[]
@@ -25,7 +25,7 @@ model Script {
   audience  String
   tone      String
   length    Int
-  output    Json
+  output    String
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
@@ -40,10 +40,4 @@ model Usage {
   user User @relation(fields: [userId], references: [id])
 
   @@unique([userId, month])
-}
-
-enum Plan {
-  FREE
-  CREATOR
-  PRO
 }
