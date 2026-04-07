@@ -2,6 +2,9 @@
 
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import axios from "axios";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { getStoredAuthToken } from "@/lib/auth-client";
 
 type ScriptResult = {
   hooks?: string[];
@@ -44,6 +47,9 @@ type ThumbnailIdea = {
 };
 
 export default function Dashboard() {
+  const router = useRouter();
+  const { status } = useSession();
+  const [authChecked, setAuthChecked] = useState(false);
   const [topic, setTopic] = useState("");
   const [audience, setAudience] = useState("");
   const [tone, setTone] = useState("Authoritative");
@@ -58,6 +64,19 @@ export default function Dashboard() {
   const [refiningSectionId, setRefiningSectionId] = useState<string | null>(null);
   const [generatedThumbnailIdeas, setGeneratedThumbnailIdeas] = useState<ThumbnailIdea[]>([]);
   const [thumbnailIdeaVersion, setThumbnailIdeaVersion] = useState(0);
+
+  useEffect(() => {
+    if (status === "loading") {
+      return;
+    }
+
+    if (status === "authenticated" || getStoredAuthToken()) {
+      setAuthChecked(true);
+      return;
+    }
+
+    router.replace("/auth");
+  }, [router, status]);
 
   const generateScript = async () => {
     try {
@@ -338,6 +357,14 @@ export default function Dashboard() {
   const revealNextSection = () => {
     setVisibleSectionCount((current) => (current < sections.length ? current + 1 : current));
   };
+
+  if (!authChecked) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-black text-white">
+        <p className="text-sm text-zinc-400">Checking access...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black text-white p-8">
