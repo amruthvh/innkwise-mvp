@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { Eye, EyeOff } from "lucide-react";
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = useMemo(() => searchParams?.get("token") ?? "", [searchParams]);
@@ -136,5 +136,24 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-[#050816] px-4 py-10 sm:px-6">
+          <div className="mx-auto max-w-2xl rounded-[2.5rem] border border-white/10 bg-[#0b1020]/90 px-6 py-10 shadow-[0_20px_70px_rgba(15,23,42,0.35)] sm:px-10 sm:py-14">
+            <div className="mx-auto max-w-xl space-y-4 text-center">
+              <h1 className="text-4xl font-semibold tracking-tight text-white">Set New Password</h1>
+              <p className="text-base text-slate-400">Loading reset details...</p>
+            </div>
+          </div>
+        </main>
+      }
+    >
+      <ResetPasswordContent />
+    </Suspense>
   );
 }
