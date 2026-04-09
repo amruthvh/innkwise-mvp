@@ -271,7 +271,7 @@ export default function AuthPage() {
                 <button
                   type="button"
                   onClick={handleGoogleSignIn}
-                  disabled={!googleEnabled || googleLoading || status === "loading"}
+                  disabled={!googleEnabled || googleLoading}
                   className="flex h-14 w-full items-center justify-center gap-3 rounded-full border border-white/10 bg-[#11182b] px-5 text-lg font-semibold text-white transition hover:border-cyan-400/40 hover:bg-[#151f37] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <GoogleMark />
