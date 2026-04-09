@@ -117,7 +117,7 @@ export default function AuthPage() {
       setGoogleLoading(true);
       setError("");
       setAuthSuccess("");
-      await signIn("google", { callbackUrl: "/auth" });
+      await signIn("google", { callbackUrl: "/dashboard" });
     } catch {
       setError("Unable to start Google sign-in right now.");
       setGoogleLoading(false);

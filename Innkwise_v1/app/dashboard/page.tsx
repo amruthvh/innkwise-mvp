@@ -4,7 +4,7 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { getStoredAuthToken } from "@/lib/auth-client";
+import { getStoredAuthToken, storeAuthToken } from "@/lib/auth-client";
 
 type ScriptResult = {
   hooks?: string[];
@@ -48,7 +48,7 @@ type ThumbnailIdea = {
 
 export default function Dashboard() {
   const router = useRouter();
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const [authChecked, setAuthChecked] = useState(false);
   const [topic, setTopic] = useState("");
   const [audience, setAudience] = useState("");
@@ -70,13 +70,19 @@ export default function Dashboard() {
       return;
     }
 
-    if (status === "authenticated" || getStoredAuthToken()) {
+    if (status === "authenticated" && session?.appAuthToken) {
+      storeAuthToken(session.appAuthToken);
+      setAuthChecked(true);
+      return;
+    }
+
+    if (getStoredAuthToken()) {
       setAuthChecked(true);
       return;
     }
 
     router.replace("/auth");
-  }, [router, status]);
+  }, [router, session, status]);
 
   const generateScript = async () => {
     try {
