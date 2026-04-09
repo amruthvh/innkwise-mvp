@@ -5,7 +5,7 @@ import { AppProviders } from "@/app/components/app-providers";
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>
+      <body className="bg-[#050816] text-white">
         <AppProviders>{children}</AppProviders>
       </body>
     </html>
