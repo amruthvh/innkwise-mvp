@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { createAuthToken } from "@/lib/auth";
@@ -9,6 +10,15 @@ type AppAuthUser = {
   email: string;
   planType: string;
 };
+
+function buildFallbackAppAuthUser(email: string): AppAuthUser {
+  const hash = createHash("sha256").update(email.toLowerCase()).digest("hex").slice(0, 24);
+  return {
+    id: `fallback-${hash}`,
+    email,
+    planType: "FREE"
+  };
+}
 
 async function findOrCreateAppAuthUser(email: string): Promise<AppAuthUser> {
   try {
@@ -34,8 +44,14 @@ async function findOrCreateAppAuthUser(email: string): Promise<AppAuthUser> {
       }
     });
   } catch {
-    const { user } = await findOrCreateLocalUser(email);
-    return user;
+    try {
+      const { user } = await findOrCreateLocalUser(email);
+      return user;
+    } catch {
+      // Vercel production is not a reliable writable filesystem, so fall back
+      // to a deterministic in-memory app user instead of failing auth.
+      return buildFallbackAppAuthUser(email);
+    }
   }
 }
 
