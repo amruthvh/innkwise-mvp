@@ -171,14 +171,6 @@ export default function AuthPage() {
       ? "Connecting to Google..."
       : "Continue with Google";
 
-  if (status === "loading") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-black text-white">
-        <p>Loading...</p>
-      </div>
-    );
-  }
-
   return (
     <main className="min-h-screen bg-[#050816] px-4 py-6 sm:px-6 sm:py-8">
       <div className="mx-auto max-w-xl rounded-[2rem] border border-white/10 bg-[#0b1020]/90 px-5 py-8 shadow-[0_20px_70px_rgba(15,23,42,0.35)] sm:px-8 sm:py-10">
