@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { existsSync } from "fs";
 import { join } from "path";
 import {
@@ -100,6 +101,8 @@ const socialLinks = [
 ];
 
 export default function Home() {
+  redirect("/auth");
+
   const demoVideoExists = existsSync(join(process.cwd(), "public", "demo", "innkwise-demo.mp4"));
   const demoPosterExists = existsSync(
     join(process.cwd(), "public", "demo", "innkwise-demo-poster.jpg")
