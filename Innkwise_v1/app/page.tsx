@@ -117,7 +117,7 @@ export default function Home() {
     ? "/founder/amruth-headshot.jpg"
     : founderHeadshotJpegExists
       ? "/founder/amruth-headshot.jpeg"
-      : null;
+      : undefined;
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#050816] text-white">
