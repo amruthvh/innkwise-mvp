@@ -7,7 +7,7 @@ export type AuthPayload = JwtPayload & {
 };
 
 function getJwtSecret(): string {
-  const secret = process.env.JWT_SECRET;
+  const secret = process.env.JWT_SECRET ?? process.env.NEXTAUTH_SECRET;
 
   if (!secret) {
     throw new Error("JWT secret is not configured.");

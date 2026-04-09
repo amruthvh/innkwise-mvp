@@ -67,8 +67,7 @@ export default function AuthPage() {
     }
 
     storeAuthToken(session.appAuthToken);
-    router.push("/dashboard");
-  }, [router, session, status]);
+  }, [session, status]);
 
   const handleContinue = async () => {
     try {
