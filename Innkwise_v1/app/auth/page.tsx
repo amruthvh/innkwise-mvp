@@ -160,7 +160,6 @@ export default function AuthPage() {
     }
   };
 
-  const title = accessMode === "signin" ? "Welcome Back!" : "Let's Set Your Account";
   const identifierLabel = "Email or Phone Number";
   const identifierPlaceholder = "Enter your email or phone number";
   const passwordPlaceholder =
@@ -173,10 +172,10 @@ export default function AuthPage() {
       : "Continue with Google";
 
   return (
-    <main className="min-h-screen bg-[#050816] px-4 py-10 sm:px-6">
-      <div className="mx-auto max-w-2xl rounded-[2.5rem] border border-white/10 bg-[#0b1020]/90 px-6 py-10 shadow-[0_20px_70px_rgba(15,23,42,0.35)] sm:px-10 sm:py-14">
-        <div className="mx-auto max-w-xl">
-          <div className="mb-8 flex justify-center">
+    <main className="min-h-screen bg-[#050816] px-4 py-6 sm:px-6 sm:py-8">
+      <div className="mx-auto max-w-xl rounded-[2rem] border border-white/10 bg-[#0b1020]/90 px-5 py-8 shadow-[0_20px_70px_rgba(15,23,42,0.35)] sm:px-8 sm:py-10">
+        <div className="mx-auto max-w-lg">
+          <div className="mb-6 flex justify-center">
             <div className="flex items-center gap-3 text-sm font-semibold tracking-[0.24em] text-white">
               <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-400/30 bg-cyan-400/10 text-cyan-300 shadow-[0_0_30px_rgba(34,211,238,0.18)]">
                 IN
@@ -260,16 +259,12 @@ export default function AuthPage() {
             </div>
           ) : (
             <>
-              <h1 className="text-center text-4xl font-semibold tracking-tight text-white">
-                {title}
-              </h1>
-
-              <div className="mt-10 space-y-8">
+              <div className="mt-4 space-y-6">
                 <button
                   type="button"
                   onClick={handleGoogleSignIn}
                   disabled={!googleEnabled || googleLoading || status === "loading"}
-                  className="flex h-16 w-full items-center justify-center gap-3 rounded-full border border-white/10 bg-[#11182b] px-5 text-xl font-semibold text-white transition hover:border-cyan-400/40 hover:bg-[#151f37] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex h-14 w-full items-center justify-center gap-3 rounded-full border border-white/10 bg-[#11182b] px-5 text-lg font-semibold text-white transition hover:border-cyan-400/40 hover:bg-[#151f37] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <GoogleMark />
                   <span>{googleButtonLabel}</span>
@@ -282,7 +277,7 @@ export default function AuthPage() {
                 </div>
 
                 <label className="block space-y-3">
-                  <span className="text-2xl font-medium text-white sm:text-[2rem]">
+                  <span className="text-xl font-medium text-white sm:text-2xl">
                     {identifierLabel}
                   </span>
                   <input
@@ -294,12 +289,12 @@ export default function AuthPage() {
                       setAuthSuccess("");
                     }}
                     placeholder={identifierPlaceholder}
-                    className="h-16 w-full rounded-2xl border border-white/10 bg-[#11182b] px-5 text-2xl text-white outline-none transition placeholder:text-slate-400 focus:border-cyan-400/50"
+                    className="h-14 w-full rounded-2xl border border-white/10 bg-[#11182b] px-5 text-xl text-white outline-none transition placeholder:text-slate-400 focus:border-cyan-400/50"
                   />
                 </label>
 
                 <div className="space-y-3">
-                  <span className="block text-2xl font-medium text-white sm:text-[2rem]">
+                  <span className="block text-xl font-medium text-white sm:text-2xl">
                     Password
                   </span>
                   <div className="relative">
@@ -312,7 +307,7 @@ export default function AuthPage() {
                         setAuthSuccess("");
                       }}
                       placeholder={passwordPlaceholder}
-                      className="h-16 w-full rounded-2xl border border-white/10 bg-[#11182b] px-5 pr-16 text-2xl text-white outline-none transition placeholder:text-slate-400 focus:border-cyan-400/50"
+                      className="h-14 w-full rounded-2xl border border-white/10 bg-[#11182b] px-5 pr-16 text-xl text-white outline-none transition placeholder:text-slate-400 focus:border-cyan-400/50"
                     />
                     <button
                       type="button"
@@ -360,12 +355,12 @@ export default function AuthPage() {
                   type="button"
                   onClick={handleContinue}
                   disabled={loading || !identifier.trim() || password.trim().length < 6}
-                  className="h-16 w-full rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 text-2xl font-semibold text-slate-950 transition hover:from-cyan-300 hover:to-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="h-14 w-full rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 text-xl font-semibold text-slate-950 transition hover:from-cyan-300 hover:to-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {buttonLabel}
                 </button>
 
-                <p className="text-center text-xl text-cyan-300">
+                <p className="text-center text-lg text-cyan-300">
                   {accessMode === "signin" ? "Don't Have An Account? " : "Already Have An Account? "}
                   <button
                     type="button"
