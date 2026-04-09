@@ -320,10 +320,7 @@ export default function AuthPage() {
                   </div>
                 </div>
 
-                <div className="flex justify-between gap-4 text-sm text-slate-400 sm:text-xl">
-                  <p className="max-w-sm leading-6 text-slate-400">
-                    Google sign-in uses Google for authentication and account recovery.
-                  </p>
+                <div className="flex justify-end gap-4 text-sm text-slate-400 sm:text-xl">
                   <button
                     type="button"
                     onClick={() => {
