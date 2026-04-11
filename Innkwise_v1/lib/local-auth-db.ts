@@ -1,5 +1,6 @@
 import { existsSync } from "fs";
 import { mkdir, readFile, writeFile } from "fs/promises";
+import { tmpdir } from "os";
 import { join } from "path";
 
 type LocalUser = {
@@ -13,7 +14,7 @@ type LocalUser = {
   resetPasswordExpiresAt?: string | null;
 };
 
-const dataDir = join(process.cwd(), "data");
+const dataDir = process.env.VERCEL === "1" ? join(tmpdir(), "innkwise") : join(process.cwd(), "data");
 const usersFile = join(dataDir, "users.json");
 
 async function ensureUsersFile() {

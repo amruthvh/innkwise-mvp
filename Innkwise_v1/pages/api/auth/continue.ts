@@ -17,6 +17,13 @@ type Body = {
   accessMode?: "signup" | "signin";
 };
 
+function isReadonlyFilesystemError(error: unknown) {
+  return (
+    error instanceof Error &&
+    (error.message.includes("read-only file system") || error.message.includes("EROFS"))
+  );
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -84,31 +91,53 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         user = existingUser;
       }
-    } catch {
+    } catch (dbError) {
       if (accessMode === "signup") {
-        const createdLocalUser = await createSignupLocalUser(resolved.userEmail, passwordHash);
-        if (!createdLocalUser) {
-          return res.status(400).json({ error: "Account already exists. Please sign in." });
-        }
+        try {
+          const createdLocalUser = await createSignupLocalUser(resolved.userEmail, passwordHash);
+          if (!createdLocalUser) {
+            return res.status(400).json({ error: "Account already exists. Please sign in." });
+          }
 
-        user = createdLocalUser;
-        isNewUser = true;
+          user = createdLocalUser;
+          isNewUser = true;
+        } catch (localAuthError) {
+          if (isReadonlyFilesystemError(localAuthError) || isReadonlyFilesystemError(dbError)) {
+            return res.status(503).json({
+              error:
+                "Password sign up is unavailable in this deployment right now. Please continue with Google."
+            });
+          }
+
+          throw localAuthError;
+        }
       } else {
-        const localUser = await findLocalUserByEmail(resolved.userEmail);
-        if (!localUser) {
-          return res.status(404).json({ error: "No account found. Please sign up first." });
-        }
+        try {
+          const localUser = await findLocalUserByEmail(resolved.userEmail);
+          if (!localUser) {
+            return res.status(404).json({ error: "No account found. Please sign up first." });
+          }
 
-        if (!localUser.passwordHash) {
-          await setLocalUserPassword(resolved.userEmail, passwordHash);
-          return res.status(400).json({ error: "Password was not set for this account. Please try signing in again now." });
-        }
+          if (!localUser.passwordHash) {
+            await setLocalUserPassword(resolved.userEmail, passwordHash);
+            return res.status(400).json({ error: "Password was not set for this account. Please try signing in again now." });
+          }
 
-        if (localUser.passwordHash !== passwordHash) {
-          return res.status(401).json({ error: "Incorrect password." });
-        }
+          if (localUser.passwordHash !== passwordHash) {
+            return res.status(401).json({ error: "Incorrect password." });
+          }
 
-        user = localUser;
+          user = localUser;
+        } catch (localAuthError) {
+          if (isReadonlyFilesystemError(localAuthError) || isReadonlyFilesystemError(dbError)) {
+            return res.status(503).json({
+              error:
+                "Password sign in is unavailable in this deployment right now. Please continue with Google."
+            });
+          }
+
+          throw localAuthError;
+        }
       }
     }
 
