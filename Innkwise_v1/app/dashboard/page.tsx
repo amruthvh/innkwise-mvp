@@ -55,8 +55,8 @@ export default function Dashboard() {
   const [tone, setTone] = useState("Authoritative");
   const [videoType, setVideoType] = useState<"long" | "shorts">("long");
   const [length, setLength] = useState(8);
-  const [includeResearch, setIncludeResearch] = useState(true);
-  const [includeCaseStudy, setIncludeCaseStudy] = useState(true);
+  const [includeResearch] = useState(true);
+  const [includeCaseStudy] = useState(true);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ScriptResult | null>(null);
   const [visibleSectionCount, setVisibleSectionCount] = useState(0);
@@ -428,28 +428,6 @@ export default function Dashboard() {
               <option value="shorts">YouTube Shorts</option>
             </select>
           </div>
-
-          {videoType === "long" && (
-            <div className="flex gap-6">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={includeResearch}
-                  onChange={() => setIncludeResearch(!includeResearch)}
-                />{" "}
-                Include Research
-              </label>
-
-              <label>
-                <input
-                  type="checkbox"
-                  checked={includeCaseStudy}
-                  onChange={() => setIncludeCaseStudy(!includeCaseStudy)}
-                />{" "}
-                Include Case Study
-              </label>
-            </div>
-          )}
 
           <button
             onClick={generateScript}
