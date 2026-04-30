@@ -397,6 +397,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const isShorts = req.body.videoType === "shorts";
+    const shortsDuration = Math.min(3, Math.max(1, Math.round(req.body.length)));
 
     if (process.env.MOCK_GENERATE_SCRIPT === "true") {
       if (isShorts) {
@@ -435,7 +436,7 @@ Return ONLY valid JSON:
 }
 
 STRICT RULES:
-- Total length must fit within 45-60 seconds spoken
+- Total length must fit within ${shortsDuration} minute${shortsDuration === 1 ? "" : "s"} spoken
 - High energy
 - Fast pacing
 - Short punchy sentences
@@ -455,7 +456,7 @@ Audience: ${req.body.audience}
 Tone: ${req.body.tone}
 `;
 
-      const raw = await callHuggingFace(prompt, 800);
+      const raw = await callHuggingFace(prompt, shortsDuration === 1 ? 800 : shortsDuration === 2 ? 1100 : 1400);
       const parsed = await parseOrRepairShorts(raw);
 
       return res.status(200).json(parsed);

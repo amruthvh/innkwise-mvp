@@ -46,6 +46,9 @@ type ThumbnailIdea = {
   composition: string;
 };
 
+const longFormDurations = [5, 8, 12, 15];
+const shortsDurations = [1, 2, 3];
+
 export default function Dashboard() {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -64,6 +67,7 @@ export default function Dashboard() {
   const [refiningSectionId, setRefiningSectionId] = useState<string | null>(null);
   const [generatedThumbnailIdeas, setGeneratedThumbnailIdeas] = useState<ThumbnailIdea[]>([]);
   const [thumbnailIdeaVersion, setThumbnailIdeaVersion] = useState(0);
+  const durationOptions = videoType === "shorts" ? shortsDurations : longFormDurations;
 
   useEffect(() => {
     if (status === "loading") {
@@ -83,6 +87,14 @@ export default function Dashboard() {
 
     router.replace("/auth");
   }, [router, session, status]);
+
+  useEffect(() => {
+    const validDurations = videoType === "shorts" ? shortsDurations : longFormDurations;
+
+    if (!validDurations.includes(length)) {
+      setLength(videoType === "shorts" ? 1 : 8);
+    }
+  }, [length, videoType]);
 
   const generateScript = async () => {
     try {
@@ -411,12 +423,12 @@ export default function Dashboard() {
               className="p-3 rounded bg-zinc-800"
               value={length}
               onChange={(e) => setLength(Number(e.target.value))}
-              disabled={videoType === "shorts"}
             >
-              <option value={5}>5 min</option>
-              <option value={8}>8 min</option>
-              <option value={12}>12 min</option>
-              <option value={15}>15 min</option>
+              {durationOptions.map((duration) => (
+                <option key={duration} value={duration}>
+                  {duration} min
+                </option>
+              ))}
             </select>
 
             <select
