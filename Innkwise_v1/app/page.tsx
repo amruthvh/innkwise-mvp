@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { existsSync } from "fs";
 import { join } from "path";
 import {
@@ -100,6 +101,8 @@ const socialLinks = [
 ];
 
 export default function Home() {
+  redirect("/auth");
+
   const demoVideoExists = existsSync(join(process.cwd(), "public", "demo", "innkwise-demo.mp4"));
   const demoPosterExists = existsSync(
     join(process.cwd(), "public", "demo", "innkwise-demo-poster.jpg")
@@ -144,7 +147,7 @@ export default function Home() {
 
             <div className="flex items-center gap-3">
               <AuthAwareLink
-                hrefIfAuthed={appDashboardUrl}
+                hrefIfAuthed="/auth"
                 hrefIfGuest="/auth"
                 className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-5 py-2.5 text-sm font-medium text-cyan-200 transition hover:border-cyan-300/60 hover:bg-cyan-300/15 hover:text-white"
               >
@@ -171,7 +174,7 @@ export default function Home() {
 
           <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
             <AuthAwareLink
-              hrefIfAuthed={appDashboardUrl}
+              hrefIfAuthed="/auth"
               hrefIfGuest="/auth"
               className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:scale-[1.02] hover:shadow-[0_12px_40px_rgba(56,189,248,0.35)]"
             >
@@ -224,7 +227,7 @@ export default function Home() {
               </h2>
             </div>
             <AuthAwareLink
-              hrefIfAuthed={appDashboardUrl}
+              hrefIfAuthed="/auth"
               hrefIfGuest="/auth"
               className="inline-flex items-center gap-2 text-sm font-medium text-cyan-300 transition hover:text-white"
             >
@@ -282,7 +285,7 @@ export default function Home() {
               Generate hooks, shape the story, and get recording faster with Smart scripting support.
             </p>
             <AuthAwareLink
-              hrefIfAuthed={appDashboardUrl}
+              hrefIfAuthed="/auth"
               hrefIfGuest="/auth"
               className="mt-8 inline-flex items-center gap-2 rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white transition hover:scale-[1.02] hover:bg-slate-900"
             >

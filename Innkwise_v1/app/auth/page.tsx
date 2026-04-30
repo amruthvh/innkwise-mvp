@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 import { Eye, EyeOff } from "lucide-react";
 import { signIn, useSession } from "next-auth/react";
-import { getStoredAuthToken, storeAuthToken } from "@/lib/auth-client";
+import { storeAuthToken } from "@/lib/auth-client";
 
 type ContinueResponse = {
   token: string;
@@ -53,7 +53,6 @@ export default function AuthPage() {
   const [authSuccess, setAuthSuccess] = useState("");
   const [forgotSuccess, setForgotSuccess] = useState("");
   const [devResetLink, setDevResetLink] = useState("");
-  const [checkingExistingAuth, setCheckingExistingAuth] = useState(true);
 
   useEffect(() => {
     axios
@@ -63,23 +62,12 @@ export default function AuthPage() {
   }, []);
 
   useEffect(() => {
-    if (status === "loading") {
+    if (status !== "authenticated" || !session?.appAuthToken) {
       return;
     }
 
-    if (status === "authenticated" && session?.appAuthToken) {
-      storeAuthToken(session.appAuthToken);
-      router.replace("/dashboard");
-      return;
-    }
-
-    if (getStoredAuthToken()) {
-      router.replace("/dashboard");
-      return;
-    }
-
-    setCheckingExistingAuth(false);
-  }, [router, session, status]);
+    storeAuthToken(session.appAuthToken);
+  }, [session, status]);
 
   const handleContinue = async () => {
     try {
@@ -182,10 +170,6 @@ export default function AuthPage() {
     : googleLoading
       ? "Connecting to Google..."
       : "Continue with Google";
-
-  if (checkingExistingAuth) {
-    return <main className="min-h-screen bg-[#050816]" />;
-  }
 
   return (
     <main className="min-h-screen bg-[#050816] px-4 py-6 sm:px-6 sm:py-8">
