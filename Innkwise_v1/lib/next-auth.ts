@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { createAuthToken } from "@/lib/auth";
+import { trackUserEvent } from "@/lib/analytics";
 import { findOrCreateLocalUser } from "@/lib/local-auth-db";
 import { prisma } from "@/lib/prisma";
 
@@ -55,6 +56,18 @@ async function findOrCreateAppAuthUser(email: string): Promise<AppAuthUser> {
   }
 }
 
+async function trackGoogleSignIn(user: AppAuthUser) {
+  try {
+    await trackUserEvent({
+      userId: user.id,
+      email: user.email,
+      event: "auth_google_sign_in"
+    });
+  } catch (error) {
+    console.error("Failed to track Google sign in event.", error);
+  }
+}
+
 const providers = [];
 
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
@@ -82,7 +95,8 @@ export const authOptions: NextAuthOptions = {
         return false;
       }
 
-      await findOrCreateAppAuthUser(user.email);
+      const appUser = await findOrCreateAppAuthUser(user.email);
+      await trackGoogleSignIn(appUser);
       return true;
     },
     async jwt({ token, user }) {
