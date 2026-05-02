@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -40,4 +40,17 @@ model Usage {
   user User @relation(fields: [userId], references: [id])
 
   @@unique([userId, month])
+}
+
+model UserEvent {
+  id        String   @id @default(uuid())
+  userId    String?
+  email     String?
+  event     String
+  path      String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([event, createdAt])
 }

@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
+import { trackUserEvent } from "@/lib/analytics";
 import { createAuthToken } from "@/lib/auth";
 import { createPasswordHash } from "@/lib/auth-secrets";
 import {
@@ -22,6 +23,18 @@ function isReadonlyFilesystemError(error: unknown) {
     error instanceof Error &&
     (error.message.includes("read-only file system") || error.message.includes("EROFS"))
   );
+}
+
+async function trackPasswordAuth(user: { id: string; email: string }, accessMode: "signup" | "signin") {
+  try {
+    await trackUserEvent({
+      userId: user.id,
+      email: user.email,
+      event: accessMode === "signup" ? "auth_password_signup" : "auth_password_signin"
+    });
+  } catch (error) {
+    console.error("Failed to track password auth event.", error);
+  }
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -149,6 +162,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       id: user.id,
       email: user.email
     });
+    await trackPasswordAuth(user, accessMode);
 
     return res.status(200).json({
       token,
