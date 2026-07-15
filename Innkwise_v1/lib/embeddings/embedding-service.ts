@@ -4,6 +4,7 @@ import type { EmbeddingModel, EmbeddingVector } from "@/lib/retrieval/types";
 
 export const DEFAULT_EMBEDDING_MODEL: EmbeddingModel = "BAAI/bge-small-en-v1.5";
 export const EMBEDDING_DIMENSIONS = 384;
+const DEFAULT_EMBEDDING_TIMEOUT_MS = 4000;
 
 type EmbeddingInputKind = "query" | "passage";
 
@@ -108,8 +109,13 @@ export async function generateEmbedding(
   }
 
   const startedAt = Date.now();
+  const controller = new AbortController();
+  const timeoutMs = Number(process.env.EMBEDDING_TIMEOUT_MS ?? DEFAULT_EMBEDDING_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : DEFAULT_EMBEDDING_TIMEOUT_MS);
+
   const response = await fetch(`https://api-inference.huggingface.co/pipeline/feature-extraction/${DEFAULT_EMBEDDING_MODEL}`, {
     method: "POST",
+    signal: controller.signal,
     headers: {
       Authorization: `Bearer ${getHuggingFaceToken()}`,
       "Content-Type": "application/json"
@@ -120,7 +126,7 @@ export async function generateEmbedding(
         wait_for_model: true
       }
     })
-  });
+  }).finally(() => clearTimeout(timeout));
 
   if (!response.ok) {
     const errorText = await response.text();

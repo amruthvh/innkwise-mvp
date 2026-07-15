@@ -55,6 +55,30 @@ function mapRelevantKnowledgeSource(row: RelevantKnowledgeSourceRow, snippetChar
   };
 }
 
+async function hasSearchableKnowledgeSources(input: {
+  userId: string;
+  selectedKnowledgeSourceIds?: string[];
+}) {
+  const selectedIds = input.selectedKnowledgeSourceIds?.filter(Boolean) ?? [];
+  const selectedFilter = selectedIds.length
+    ? Prisma.sql`and id in (${uuidListSql(selectedIds)})`
+    : Prisma.empty;
+
+  const rows = await prisma.$queryRaw<Array<{ exists: boolean }>>`
+    select exists (
+      select 1
+      from public.knowledge_sources
+      where user_id = ${input.userId}::uuid
+        and embedding is not null
+        and extraction_status <> 'failed'
+        ${selectedFilter}
+      limit 1
+    ) as exists
+  `;
+
+  return Boolean(rows[0]?.exists);
+}
+
 export async function searchRelevantKnowledge(
   query: string,
   options: SemanticSearchOptions
@@ -68,6 +92,13 @@ export async function searchRelevantKnowledge(
   const selectedFilter = selectedIds.length
     ? Prisma.sql`and id in (${uuidListSql(selectedIds)})`
     : Prisma.empty;
+  const hasSearchableSources = await hasSearchableKnowledgeSources({
+    userId: options.userId,
+    selectedKnowledgeSourceIds: selectedIds
+  });
+
+  if (!hasSearchableSources) return [];
+
   const queryEmbedding = await generateEmbedding(cleanedQuery, "query", {
     userId: options.userId
   });
