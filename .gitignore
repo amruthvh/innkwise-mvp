@@ -28,3 +28,15 @@ yarn-error.log*
 
 # Cache
 node_modules/.cache/
+
+# Next.js app in Innkwise_v1
+Innkwise_v1/.next/
+Innkwise_v1/.next-stale*/
+Innkwise_v1/node_modules/
+Innkwise_v1/tsconfig.tsbuildinfo
+Innkwise_v1/.env
+Innkwise_v1/.env.local
+Innkwise_v1/.env.development.local
+Innkwise_v1/.env.test.local
+Innkwise_v1/.env.production.local
+Innkwise_v1/data/*.json

@@ -1,0 +1,226 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String   @id @default(uuid())
+  email            String   @unique
+  passwordHash     String?
+  planType         String   @default("FREE")
+  stripeCustomerId String?
+  createdAt        DateTime @default(now())
+  scripts          Script[]
+  usage            Usage[]
+  libraryItems     LibraryItem[]
+}
+
+model Script {
+  id        String   @id @default(uuid())
+  userId    String
+  topic     String
+  audience  String
+  tone      String
+  length    Int
+  output    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Usage {
+  id     String @id @default(uuid())
+  userId String
+  month  String
+  count  Int    @default(0)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, month])
+}
+
+model LibraryItem {
+  id            String   @id @default(uuid())
+  userId        String
+  kind          String
+  name          String
+  url           String?
+  mimeType      String?
+  size          Int?
+  contentBase64 String?
+  isFavorite    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([userId, kind])
+}
+
+model UserEvent {
+  id        String   @id @default(uuid())
+  userId    String?
+  email     String?
+  event     String
+  path      String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([event, createdAt])
+}
+
+model Profile {
+  id               String   @id @db.Uuid
+  email            String?  @unique
+  fullName         String?  @map("full_name")
+  avatarUrl        String?  @map("avatar_url")
+  plan             String   @default("FREE")
+  stripeCustomerId String?  @map("stripe_customer_id")
+  onboardingStatus Json     @default("{}") @map("onboarding_status")
+  preferences      Json     @default("{}")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @default(now()) @map("updated_at")
+
+  @@index([createdAt])
+  @@map("profiles")
+}
+
+model CreatorProfile {
+  id                  String   @id @default(uuid()) @db.Uuid
+  userId              String   @unique @map("user_id") @db.Uuid
+  creatorName         String?  @map("creator_name")
+  brandName           String?  @map("brand_name")
+  tagline             String?
+  bio                 String?
+  experienceLevel     String?  @map("experience_level")
+  archetypes          String[] @default([])
+  goals               Json     @default("{}")
+  niche               Json     @default("{}")
+  audience            Json     @default("{}")
+  platformPreferences Json     @default("{}") @map("platform_preferences")
+  writingPreferences  Json     @default("{}") @map("writing_preferences")
+  aiControls          Json     @default("{}") @map("ai_controls")
+  memory              Json     @default("{}")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @default(now()) @map("updated_at")
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("creator_profiles")
+}
+
+model KnowledgeSource {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  sourceType        String   @default("file") @map("source_type")
+  title             String
+  description       String?
+  url               String?
+  storageBucket     String?  @map("storage_bucket")
+  storagePath       String?  @map("storage_path")
+  mimeType          String?  @map("mime_type")
+  sizeBytes         BigInt?  @map("size_bytes")
+  checksum          String?
+  extractionStatus  String   @default("pending") @map("extraction_status")
+  extractedText     String?  @map("extracted_text")
+  summary           String?
+  tags              String[] @default([])
+  metadata          Json     @default("{}")
+  embeddingMetadata Json     @default("{}") @map("embedding_metadata")
+  embedding         Unsupported("vector")?
+  isFavorite        Boolean  @default(false) @map("is_favorite")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @default(now()) @map("updated_at")
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@map("knowledge_sources")
+}
+
+model Conversation {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  title           String?
+  status          String   @default("active")
+  contextSnapshot Json     @default("{}") @map("context_snapshot")
+  memoryState     Json     @default("{}") @map("memory_state")
+  metadata        Json     @default("{}")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @map("updated_at")
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@map("conversations")
+}
+
+model Message {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  role           String
+  content        String?
+  contentJson    Json     @default("{}") @map("content_json")
+  attachments    Json     @default("[]")
+  tokenCount     Int      @default(0) @map("token_count")
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @map("updated_at")
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+model GeneratedAsset {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  conversationId  String?  @map("conversation_id") @db.Uuid
+  sourceMessageId String?  @map("source_message_id") @db.Uuid
+  assetType       String   @map("asset_type")
+  title           String?
+  prompt          String?
+  outputText      String?  @map("output_text")
+  outputJson      Json     @default("{}") @map("output_json")
+  model           String?
+  parameters      Json     @default("{}")
+  sourceContext   Json     @default("{}") @map("source_context")
+  status          String   @default("completed")
+  storageBucket   String?  @map("storage_bucket")
+  storagePath     String?  @map("storage_path")
+  publicUrl       String?  @map("public_url")
+  metadata        Json     @default("{}")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @map("updated_at")
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@map("generated_assets")
+}
+
+model CreatorUsage {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  periodKey   String   @map("period_key")
+  periodStart DateTime @map("period_start") @db.Date
+  metric      String
+  count       Int      @default(0)
+  creditsUsed Decimal  @default(0) @map("credits_used") @db.Decimal(12, 2)
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  @@unique([userId, periodKey, metric])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([userId, periodKey])
+  @@map("usage")
+}

@@ -2,10 +2,17 @@
   "name": "innkwise-v1",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
+    "postinstall": "prisma generate --schema database/prisma/schema.prisma",
     "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
+    "build": "prisma generate --schema database/prisma/schema.prisma && next build",
+    "start": "next start",
+    "lint": "next lint",
+    "prisma:generate": "prisma generate --schema database/prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate dev --schema database/prisma/schema.prisma"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -15,11 +22,13 @@
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.539.0",
     "micro": "^10.0.1",
-    "next": "^14.2.30",
+    "next": "14.2.30",
+    "next-auth": "^4.24.13",
     "openai": "^4.86.2",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "stripe": "^17.6.0"
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "stripe": "^17.6.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/jsonwebtoken": "^9.0.8",
