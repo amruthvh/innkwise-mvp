@@ -1,0 +1,12 @@
+.git
+.vercel
+.env
+.env.*
+node_modules
+Innkwise_v1/node_modules
+Innkwise_v1/.next
+Innkwise_v1/.next-stale*
+Innkwise_v1/tsconfig.tsbuildinfo
+Innkwise_v1/data/*.json
+*.log
+.DS_Store
