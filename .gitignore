@@ -40,3 +40,5 @@ Innkwise_v1/.env.development.local
 Innkwise_v1/.env.test.local
 Innkwise_v1/.env.production.local
 Innkwise_v1/data/*.json
+.vercel
+.env*
