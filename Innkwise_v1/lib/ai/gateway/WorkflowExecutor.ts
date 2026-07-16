@@ -8,7 +8,7 @@ import type {
   AIProviderName
 } from "@/lib/ai/gateway/GatewayTypes";
 
-const DEFAULT_HF_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct";
+const DEFAULT_HF_MODEL = "meta-llama/Llama-3.1-8B-Instruct";
 const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
 const DEFAULT_HF_MAX_TOKENS = 1400;
 const DEFAULT_HF_TIMEOUT_MS = 18000;
@@ -28,6 +28,24 @@ function stripHtml(value: string) {
 }
 
 function parseProviderError(status: number, text: string) {
+  try {
+    const parsed = JSON.parse(text) as {
+      error?: string | { message?: string; code?: string };
+    };
+    const message = typeof parsed.error === "string"
+      ? parsed.error
+      : parsed.error?.message;
+    if (message) {
+      return new GatewayError(
+        status >= 500 ? "LLM_PROVIDER_UNAVAILABLE" : "LLM_PROVIDER_ERROR",
+        message,
+        { retryable: status >= 500 || status === 429 }
+      );
+    }
+  } catch {
+    // Fall through to HTML/text cleanup.
+  }
+
   const cleaned = stripHtml(text);
   if (status === 504 || /gateway timeout|timeout/i.test(cleaned)) {
     return new LLMTimeoutError("The AI model provider timed out. Please try again in a moment.");
