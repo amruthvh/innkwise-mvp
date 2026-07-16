@@ -1,5 +1,4 @@
 import type { AIModelProvider, AIModelRequest, AIModelResponse } from "@/lib/ai/gateway/GatewayTypes";
-import { GatewayError } from "@/lib/ai/gateway/GatewayErrors";
 
 export type RetryDecision = {
   shouldRetry: boolean;
@@ -17,19 +16,7 @@ export class RetryManager {
   }) {
     let retryCount = 0;
     let request = input.request;
-    let response: AIModelResponse;
-
-    try {
-      response = await input.provider.generate(request);
-    } catch (error) {
-      if (!(error instanceof GatewayError) || !error.retryable || retryCount >= this.maxRetries) {
-        throw error;
-      }
-
-      retryCount += 1;
-      response = await input.provider.generate(request);
-    }
-
+    let response = await input.provider.generate(request);
     let decision = input.shouldRetry(response, retryCount);
 
     while (decision.shouldRetry && retryCount < this.maxRetries) {

@@ -417,17 +417,74 @@ async function parseOrRepairWorkflowOutput(rawText: string, template: ReturnType
     const candidate = cleanJsonString(extractJsonBlock(rawText));
     return normalizeWorkflowOutput(JSON.parse(candidate), template);
   } catch {
-    return normalizeWorkflowOutput({
-      workflow_output: {
-        workflow_id: template.id,
-        workflow_title: template.title,
-        summary: rawText.trim(),
-        sections: [],
-        next_steps: [],
-        recommended_workflows: []
-      }
-    }, template);
+    return normalizeWorkflowOutput(markdownToWorkflowOutput(rawText, template), template);
   }
+}
+
+function markdownToWorkflowOutput(rawText: string, template: ReturnType<typeof getWorkflowTemplate>): WorkflowOutput {
+  const cleaned = rawText
+    .replace(/^```(?:markdown|md|json)?\s*/i, "")
+    .replace(/```$/i, "")
+    .replace(/\r\n/g, "\n")
+    .trim();
+  const blocks = cleaned
+    .split(/\n(?=#{1,3}\s+)/g)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  const opening: string[] = [];
+  const sections: WorkflowOutput["workflow_output"]["sections"] = [];
+
+  for (const block of blocks) {
+    const headingMatch = block.match(/^#{1,3}\s+(.+?)\s*\n+([\s\S]*)$/);
+    if (!headingMatch) {
+      opening.push(block);
+      continue;
+    }
+
+    const title = headingMatch[1]
+      .replace(/[*_`"]/g, "")
+      .replace(/^\d+[\).]\s*/, "")
+      .trim();
+    const body = headingMatch[2].trim();
+    const items = body
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => /^[-*]\s+/.test(line) || /^\d+[\).]\s+/.test(line))
+      .map((line) => line.replace(/^[-*]\s+/, "").replace(/^\d+[\).]\s+/, "").trim())
+      .filter(Boolean);
+    const content = body
+      .split("\n")
+      .filter((line) => !/^[-*]\s+/.test(line.trim()) && !/^\d+[\).]\s+/.test(line.trim()))
+      .join("\n")
+      .trim();
+
+    if (title || content || items.length) {
+      sections.push({
+        title,
+        content,
+        items: items.length ? items : undefined
+      });
+    }
+  }
+
+  const fallbackTitle = template.outputStructure[0] ?? "Recommended Direction";
+  const summary = opening.join("\n\n").trim();
+  return {
+    workflow_output: {
+      workflow_id: template.id,
+      workflow_title: template.title,
+      summary: summary || `Here is my recommended direction for this ${template.title.toLowerCase()}.`,
+      sections: sections.length
+        ? sections
+        : [{
+          title: fallbackTitle,
+          content: cleaned,
+          items: undefined
+        }],
+      next_steps: [],
+      recommended_workflows: []
+    }
+  };
 }
 
 async function parseOrRepairLongForm(rawText: string): Promise<LongFormScript> {
@@ -741,7 +798,7 @@ STRICT RULES:
 - Allowed workflow_id values: ${workflowTemplates.map((template) => template.id).join(", ")}
 - Use Markdown inside content fields.
 - Make every section specific, practical, and useful.
-- Keep explanatory text to 1-2 sentences per section.
+- Give each workflow section enough substance to be useful: 2-4 concise sentences plus actionable items where appropriate.
 - Prefer short actionable items over paragraphs. Keep each item focused on one action or decision.
 - Keep items as short bullet strings when a list improves scannability.
 - Do not output hooks, title_suggestions, or script_timeline unless the workflow asks for a script.
@@ -764,8 +821,8 @@ ${isCreatorChat ? "- Keep Creator Chat responses natural and flexible. Put a sim
         maxTokens: workflowTemplate.id === "creator-chat"
           ? 2600
           : workflowTemplate.id === "research-topic"
-            ? 3800
-            : 3600
+            ? 4200
+            : 4000
       });
       if (generation.kind === "clarification") {
         return res.status(200).json(await buildClarificationPayload({

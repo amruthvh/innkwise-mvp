@@ -10,8 +10,8 @@ import type {
 
 const DEFAULT_HF_MODEL = "meta-llama/Llama-3.1-8B-Instruct";
 const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
-const DEFAULT_HF_MAX_TOKENS = 1400;
-const DEFAULT_HF_TIMEOUT_MS = 18000;
+const DEFAULT_HF_MAX_TOKENS = 2600;
+const DEFAULT_HF_TIMEOUT_MS = 25000;
 
 function readPositiveInt(value: string | undefined, fallback: number) {
   const parsed = Number(value);
@@ -223,7 +223,7 @@ export class WorkflowExecutor {
 }
 
 function createDefaultProvider(): AIModelProvider {
-  if (process.env.AI_PRIMARY_PROVIDER === "openai" || process.env.OPENAI_API_KEY) {
+  if (process.env.AI_PRIMARY_PROVIDER === "openai") {
     return new OpenAIModelProvider();
   }
 
