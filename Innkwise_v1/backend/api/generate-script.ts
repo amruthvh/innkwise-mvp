@@ -9,6 +9,7 @@ import { advisorLayer } from "@/lib/advisor/advisor-layer";
 import { withApiAuth, type AuthenticatedApiRequest } from "@/lib/auth/auth-middleware";
 import { verifyConversationOwnership } from "@/lib/auth/authorization";
 import { isApiError } from "@/lib/auth/errors";
+import { GatewayError } from "@/lib/ai/gateway/GatewayErrors";
 import { responseFormatter } from "@/lib/formatting/response-formatter";
 import { isRateLimitError } from "@/lib/rate-limit/RateLimitErrors";
 import { inputValidator } from "@/lib/validation/InputValidator";
@@ -964,6 +965,16 @@ ${timeline}
     }
     if (isInputValidationError(error)) {
       return res.status(400).json(error.toResponse());
+    }
+    if (error instanceof GatewayError) {
+      const status = error.retryable ? 503 : 500;
+      return res.status(status).json({
+        success: false,
+        error: {
+          code: error.code,
+          message: error.message
+        }
+      });
     }
     const message = error instanceof Error ? error.message : "Internal server error";
     console.error("[generate-script] request failed", error);

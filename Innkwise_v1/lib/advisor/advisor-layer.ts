@@ -78,7 +78,19 @@ function toStrings(value: unknown): string[] {
 }
 
 function cleanGeneratedText(value: string): string {
-  return value
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+    (trimmed.startsWith("[") && trimmed.endsWith("]"))
+  ) {
+    try {
+      return meaningfulText(JSON.parse(trimmed));
+    } catch {
+      // Fall through to line-level cleanup.
+    }
+  }
+
+  return trimmed
     .replace(/^```(?:markdown|md|json)?\s*/i, "")
     .replace(/```$/i, "")
     .split("\n")
@@ -230,7 +242,7 @@ function defaultRecommendations(workflow: ContextWorkflow) {
 function outputSummary(rawOutput: unknown, userMessage: string) {
   const output = workflowOutput(rawOutput);
   const summary = cleanGeneratedText(meaningfulText(output.summary));
-  if (summary) return summary;
+  if (summary && !summary.includes('"workflow_output"') && !summary.includes('"workflow_id"')) return summary;
   const firstSection = extractSections(rawOutput)[0];
   if (firstSection?.content) return firstSection.content;
   return `Here is my recommended direction for: ${userMessage}`;

@@ -11,6 +11,7 @@ import type {
 const DEFAULT_HF_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct";
 const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
 const DEFAULT_HF_MAX_TOKENS = 1400;
+const DEFAULT_HF_TIMEOUT_MS = 18000;
 
 function readPositiveInt(value: string | undefined, fallback: number) {
   const parsed = Number(value);
@@ -65,20 +66,35 @@ export class HuggingFaceLlamaProvider implements AIModelProvider {
       request.maxTokens ?? DEFAULT_HF_MAX_TOKENS,
       readPositiveInt(process.env.HF_MAX_TOKENS, DEFAULT_HF_MAX_TOKENS)
     );
+    const timeoutMs = readPositiveInt(process.env.HF_REQUEST_TIMEOUT_MS, DEFAULT_HF_TIMEOUT_MS);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const startedAt = Date.now();
-    const response = await fetch("https://router.huggingface.co/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: "user", content: request.prompt }],
-        temperature: request.temperature ?? 0.7,
-        max_tokens: maxTokens
-      })
-    });
+    let response: Response;
+
+    try {
+      response = await fetch("https://router.huggingface.co/v1/chat/completions", {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "user", content: request.prompt }],
+          temperature: request.temperature ?? 0.7,
+          max_tokens: maxTokens
+        })
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new LLMTimeoutError("The AI model provider timed out. Please try again in a moment.");
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -181,9 +197,17 @@ export class FallbackModelProvider implements AIModelProvider {
 }
 
 export class WorkflowExecutor {
-  constructor(private readonly provider: AIModelProvider = new FallbackModelProvider()) {}
+  constructor(private readonly provider: AIModelProvider = createDefaultProvider()) {}
 
   execute(request: AIModelRequest) {
     return this.provider.generate(request);
   }
+}
+
+function createDefaultProvider(): AIModelProvider {
+  if (process.env.AI_PRIMARY_PROVIDER === "openai" || process.env.OPENAI_API_KEY) {
+    return new OpenAIModelProvider();
+  }
+
+  return new FallbackModelProvider();
 }

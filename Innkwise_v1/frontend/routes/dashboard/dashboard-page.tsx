@@ -1039,7 +1039,16 @@ export default function Dashboard() {
       if (rateLimitState) {
         setRateLimitModal(rateLimitState);
       } else if (!(error instanceof RateLimitHandledError)) {
-        alert("Error generating response");
+        const apiMessage = axios.isAxiosError(error)
+          ? (
+            typeof error.response?.data?.error === "string"
+              ? error.response.data.error
+              : typeof error.response?.data?.error?.message === "string"
+                ? error.response.data.error.message
+                : null
+          )
+          : null;
+        alert(apiMessage ?? "Error generating response");
       }
     } finally {
       setLoading(false);

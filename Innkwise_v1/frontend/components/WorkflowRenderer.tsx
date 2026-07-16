@@ -75,6 +75,12 @@ function cleanText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function humanizeKey(value: string) {
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function bullets(items: unknown) {
   if (!Array.isArray(items)) return "";
   return items
@@ -85,7 +91,11 @@ function bullets(items: unknown) {
 }
 
 function removeMetadataLines(markdown: string) {
-  return markdown
+  const trimmed = markdown.trim();
+  const parsed = parseJsonContent(trimmed);
+  if (parsed) return removeMetadataLines(safeJsonMarkdown(parsed));
+
+  return trimmed
     .replace(/^```(?:markdown|md|json)?\s*/i, "")
     .replace(/```$/i, "")
     .replace(
@@ -109,7 +119,9 @@ function removeMetadataLines(markdown: string) {
       );
     })
     .join("\n")
+    .replace(/^\s*["{[\]},]+\s*$/gm, "")
     .replace(/^\s*[>#*]+\s*$/gm, "")
+    .replace(/\b(workflow_id|workflow_title|advisor_markdown|workflow_output)\b\s*[:=]\s*/gi, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
@@ -127,9 +139,7 @@ function safeJsonMarkdown(value: unknown, headingLevel = 2): string {
   return Object.entries(value as Record<string, unknown>)
     .filter(([key]) => !backendMetadataKeys.has(key.toLowerCase()))
     .map(([key, nested]) => {
-      const title = key
-        .replace(/_/g, " ")
-        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+      const title = humanizeKey(key);
       const body = safeJsonMarkdown(nested, Math.min(headingLevel + 1, 3));
       return body ? `${"#".repeat(headingLevel)} ${title}\n\n${body}` : "";
     })
@@ -158,13 +168,15 @@ export function workflowResultToMarkdown(
   const output = result?.workflow_output;
   if (output) {
     const parts: string[] = [];
-    if (output.summary?.trim()) parts.push(output.summary.trim());
+    if (output.summary?.trim()) parts.push(removeMetadataLines(output.summary));
 
     for (const section of output.sections ?? []) {
       const content = [cleanText(section.content), bullets(section.items)].filter(Boolean).join("\n\n");
       if (!content) continue;
       const title = cleanText(section.title);
-      parts.push(title ? `## ${title}\n\n${content}` : content);
+      const cleanContent = removeMetadataLines(content);
+      if (!cleanContent) continue;
+      parts.push(title ? `## ${humanizeKey(title)}\n\n${cleanContent}` : cleanContent);
     }
 
     return removeMetadataLines(parts.join("\n\n"));
