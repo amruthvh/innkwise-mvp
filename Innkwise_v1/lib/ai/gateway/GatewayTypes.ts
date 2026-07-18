@@ -1,5 +1,6 @@
 import type { ContextAssembly, ContextWorkflow } from "@/backend/context/context-engine";
 import type { LlmReadyPrompt } from "@/backend/context/prompt-builder";
+import type { TimingTracker } from "@/lib/observability/timing";
 import type { RateLimitOperation } from "@/lib/rate-limit/PlanLimits";
 import type { GeneratedAssetType, JsonObject } from "@/shared/types/creator-os";
 
@@ -27,6 +28,7 @@ export type AIGatewayExecuteInput = {
   rateLimitChecked?: boolean;
   maxTokens?: number;
   temperature?: number;
+  timing?: TimingTracker;
 };
 
 export type PreparedGatewayInput = {
@@ -43,6 +45,7 @@ export type PreparedGatewayInput = {
   rateLimitChecked?: boolean;
   maxTokens?: number;
   temperature?: number;
+  timing?: TimingTracker;
 };
 
 export type TokenUsage = {

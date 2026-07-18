@@ -204,6 +204,7 @@ export class AIGateway {
 
   async executePrepared(input: PreparedGatewayInput): Promise<AIResponse> {
     const startedAt = Date.now();
+    const timing = input.timing;
     const operation = input.operation ?? operationForWorkflow(input.workflowType);
     try {
       const authUserId = input.userId;
@@ -215,12 +216,19 @@ export class AIGateway {
           ...(input.metadata ?? {})
         }
       };
-      const validated = await inputValidator.validateChatRequest(input.userId, {
-        prompt: input.prompt,
-        workflowType: input.workflowType,
-        conversationId: input.conversationId,
-        attachments: []
-      });
+      const validated = await (timing
+        ? timing.time("gateway.validate_input", () => inputValidator.validateChatRequest(input.userId, {
+          prompt: input.prompt,
+          workflowType: input.workflowType,
+          conversationId: input.conversationId,
+          attachments: []
+        }))
+        : inputValidator.validateChatRequest(input.userId, {
+          prompt: input.prompt,
+          workflowType: input.workflowType,
+          conversationId: input.conversationId,
+          attachments: []
+        }));
       input = {
         ...input,
         prompt: validated.prompt,
@@ -228,16 +236,75 @@ export class AIGateway {
         conversationId: validated.conversationId ?? input.conversationId
       };
       if (!input.rateLimitChecked) {
-        await rateLimiter.checkQuota({
-          userId: input.userId,
-          operation,
-          prompt: input.prompt
-        });
+        await (timing
+          ? timing.time("gateway.rate_limit_check", () => rateLimiter.checkQuota({
+            userId: input.userId,
+            operation,
+            prompt: input.prompt
+          }), { operation })
+          : rateLimiter.checkQuota({
+            userId: input.userId,
+            operation,
+            prompt: input.prompt
+          }));
       }
-      promptGuard.assertSafe(input.prompt);
+      if (input.rateLimitChecked) {
+        timing?.mark("gateway.rate_limit_check_skipped", { operation });
+      }
+      if (timing) {
+        timing.timeSync("gateway.prompt_guard", () => promptGuard.assertSafe(input.prompt));
+      } else {
+        promptGuard.assertSafe(input.prompt);
+      }
       const skipOutputValidation = input.metadata?.gatewaySkipOutputValidation === true;
+      let providerAttempt = 0;
 
-      const result = await retryManager.run({
+      const result = await (timing
+        ? timing.time("gateway.llm_generation_with_validation", () => retryManager.run({
+          provider: {
+            name: "llama",
+            generate: (request) => {
+              providerAttempt += 1;
+              return timing.time("gateway.llm_provider_attempt", () => this.executor.execute(request), {
+                attempt: providerAttempt,
+                workflow: request.workflowType,
+                maxTokens: request.maxTokens ?? null
+              });
+            }
+          },
+          request: {
+            prompt: input.finalPrompt,
+            workflowType: input.workflowType,
+            maxTokens: input.maxTokens,
+            temperature: input.temperature
+          },
+          shouldRetry: (response, retryCount) => {
+            timing.mark("gateway.output_validation", {
+              retryCount,
+              providerLatencyMs: response.latencyMs,
+              completionTokens: response.tokenUsage.completionTokens
+            });
+            if (skipOutputValidation) {
+              return { shouldRetry: false };
+            }
+            const validation = outputValidator.validate(input.workflowType, response.text);
+            return {
+              shouldRetry: validation.retryable && !validation.valid,
+              reason: validation.reason
+            };
+          },
+          buildRetryPrompt: (response, decision) => [
+            input.finalPrompt,
+            "",
+            "The previous response was incomplete.",
+            decision.reason ? `Issue: ${decision.reason}` : "",
+            "Regenerate the answer and include all required user-facing sections. Do not mention this retry."
+          ].filter(Boolean).join("\n")
+        }), {
+          workflow: input.workflowType,
+          maxTokens: input.maxTokens ?? null
+        })
+        : retryManager.run({
         provider: {
           name: "llama",
           generate: (request) => this.executor.execute(request)
@@ -265,7 +332,7 @@ export class AIGateway {
           decision.reason ? `Issue: ${decision.reason}` : "",
           "Regenerate the answer and include all required user-facing sections. Do not mention this retry."
         ].filter(Boolean).join("\n")
-      });
+      }));
 
       const modelResponse = result.response;
       const validation = skipOutputValidation
@@ -283,12 +350,19 @@ export class AIGateway {
         }
       } as JsonObject;
 
-      await rateLimiter.consumeQuota({
-        userId: input.userId,
-        operation,
-        latencyMs,
-        tokenUsage: modelResponse.tokenUsage
-      });
+      await (timing
+        ? timing.time("gateway.consume_quota", () => rateLimiter.consumeQuota({
+          userId: input.userId,
+          operation,
+          latencyMs,
+          tokenUsage: modelResponse.tokenUsage
+        }), { operation })
+        : rateLimiter.consumeQuota({
+          userId: input.userId,
+          operation,
+          latencyMs,
+          tokenUsage: modelResponse.tokenUsage
+        }));
 
       logGatewayEvent("completed", {
         workflow: input.workflowType,

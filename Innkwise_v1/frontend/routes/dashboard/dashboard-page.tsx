@@ -326,6 +326,14 @@ type Preferences = {
 
 const longFormDurations = [5, 8, 12, 15];
 const shortsDurations = [1, 2, 3];
+const thinkingStages = [
+  "Understanding your request",
+  "Checking creator context",
+  "Looking for relevant knowledge",
+  "Choosing the best response shape",
+  "Drafting the answer",
+  "Polishing for readability"
+];
 const shortcutTemplates = getShortcutTemplates();
 const defaultAudienceType = "Creators";
 const PROJECTS_STORAGE_KEY = "innkwise_projects";
@@ -529,6 +537,7 @@ export default function Dashboard() {
   const [includeCaseStudy] = useState(true);
   const [loading, setLoading] = useState(false);
   const [pendingResponseAfterUserId, setPendingResponseAfterUserId] = useState<string | null>(null);
+  const [thinkingStageIndex, setThinkingStageIndex] = useState(0);
   const [chatMessages, setChatMessages] = useState<ChatThreadMessage[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -602,6 +611,19 @@ export default function Dashboard() {
     }, 250);
     return () => window.clearTimeout(timeout);
   }, [authChecked]);
+
+  useEffect(() => {
+    if (!loading) {
+      setThinkingStageIndex(0);
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      setThinkingStageIndex((current) => (current + 1) % thinkingStages.length);
+    }, 3600);
+
+    return () => window.clearInterval(interval);
+  }, [loading]);
 
   useEffect(() => {
     const validDurations = videoType === "shorts" ? shortsDurations : longFormDurations;
@@ -949,7 +971,7 @@ export default function Dashboard() {
     };
 
     try {
-      setPendingResponseAfterUserId(options?.replaceUserMessageId ?? null);
+      setPendingResponseAfterUserId(userMessage.id);
       setLoading(true);
       setChatMessages((current) => {
         if (!options?.replaceUserMessageId) return [...current, userMessage];
@@ -1270,6 +1292,7 @@ export default function Dashboard() {
               durationOptions={durationOptions}
               loading={loading}
               pendingResponseAfterUserId={pendingResponseAfterUserId}
+              thinkingLabel={thinkingStages[thinkingStageIndex]}
               chatMessages={chatMessages}
               libraryItems={libraryItems}
               projects={projects}
@@ -2156,6 +2179,7 @@ function GeneratorView({
   durationOptions,
   loading,
   pendingResponseAfterUserId,
+  thinkingLabel,
   chatMessages,
   libraryItems,
   projects,
@@ -2182,6 +2206,7 @@ function GeneratorView({
   durationOptions: number[];
   loading: boolean;
   pendingResponseAfterUserId: string | null;
+  thinkingLabel: string;
   chatMessages: ChatThreadMessage[];
   libraryItems: LibraryItem[];
   projects: Project[];
@@ -2261,13 +2286,14 @@ function GeneratorView({
               messages={chatMessages}
               loading={loading}
               pendingResponseAfterUserId={pendingResponseAfterUserId}
+              thinkingLabel={thinkingLabel}
               onEditPrompt={onEditPrompt}
               onRetryResponse={onRetryResponse}
               onAddResponseToLibrary={onAddResponseToLibrary}
               onResponseFeedback={onResponseFeedback}
             />
 
-            {loading && !pendingResponseAfterUserId && <ThinkingIndicator className="mt-6" />}
+            {loading && !pendingResponseAfterUserId && <ThinkingIndicator className="mt-6" label={thinkingLabel} />}
 
           </div>
 
@@ -2308,6 +2334,7 @@ function ChatThread({
   messages,
   loading,
   pendingResponseAfterUserId,
+  thinkingLabel,
   onEditPrompt,
   onRetryResponse,
   onAddResponseToLibrary,
@@ -2316,6 +2343,7 @@ function ChatThread({
   messages: ChatThreadMessage[];
   loading: boolean;
   pendingResponseAfterUserId: string | null;
+  thinkingLabel: string;
   onEditPrompt: (
     message: ChatThreadMessage,
     nextPrompt: string,
@@ -2538,7 +2566,7 @@ function ChatThread({
           )}
         </div>
         {message.role === "user" && pendingResponseAfterUserId === message.id && (
-          <ThinkingIndicator className="mt-3" />
+          <ThinkingIndicator className="mt-3" label={thinkingLabel} />
         )}
         </Fragment>
       );
@@ -2547,11 +2575,11 @@ function ChatThread({
   );
 }
 
-function ThinkingIndicator({ className = "" }: { className?: string }) {
+function ThinkingIndicator({ className = "", label = "Thinking" }: { className?: string; label?: string }) {
   return (
     <div className={`flex items-center gap-3 text-sm text-[var(--app-muted)] ${className}`}>
       <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-[var(--app-accent)]" />
-      Thinking
+      {label}
     </div>
   );
 }

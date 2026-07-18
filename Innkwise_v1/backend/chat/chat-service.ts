@@ -28,6 +28,7 @@ import { getAuthenticatedUser } from "@/lib/auth/auth";
 import { toCreatorUserId } from "@/backend/auth/identifiers";
 import { aiGateway } from "@/lib/ai/gateway/AIGateway";
 import { contextResolver } from "@/lib/context/context-resolver";
+import type { TimingTracker } from "@/lib/observability/timing";
 import { inputValidator } from "@/lib/validation/InputValidator";
 import type { GeneratedAssetType, JsonObject, Message } from "@/shared/types/creator-os";
 
@@ -79,6 +80,7 @@ export type StartChatTurnInput = {
   metadata?: JsonObject;
   responseInstructions?: string;
   selectedKnowledgeSourceIds?: string[];
+  timing?: TimingTracker;
 };
 
 export type FinishChatTurnInput = {
@@ -122,82 +124,155 @@ function buildFinalPrompt(llmPrompt: LlmReadyPrompt, responseInstructions?: stri
 
 export class ChatService {
   async startTurn(input: StartChatTurnInput): Promise<ChatServiceTurn> {
-    const authUser = await getAuthenticatedUser(input.req);
+    const timing = input.timing;
+    const authUser = await (timing
+      ? timing.time("chat.authenticate", () => getAuthenticatedUser(input.req))
+      : getAuthenticatedUser(input.req));
     const authUserId = authUser.id;
     const userId = toCreatorUserId(authUser.id);
-    const validatedInput = await inputValidator.validateChatRequest(userId, {
-      prompt: input.message,
-      workflowType: input.workflow,
-      conversationId: input.conversationId,
-      attachments: []
-    });
+    const validatedInput = await (timing
+      ? timing.time("chat.validate_input", () => inputValidator.validateChatRequest(userId, {
+        prompt: input.message,
+        workflowType: input.workflow,
+        conversationId: input.conversationId,
+        attachments: []
+      }))
+      : inputValidator.validateChatRequest(userId, {
+        prompt: input.message,
+        workflowType: input.workflow,
+        conversationId: input.conversationId,
+        attachments: []
+      }));
     const message = validatedInput.prompt;
     const requestedWorkflow = validatedInput.workflowType;
     const requestedConversationId = validatedInput.conversationId;
 
-    await ensureProfileForAppUser({
-      id: userId,
-      email: authUser.email
-    });
+    await (timing
+      ? timing.time("chat.ensure_profile", () => ensureProfileForAppUser({
+        id: userId,
+        email: authUser.email
+      }))
+      : ensureProfileForAppUser({
+        id: userId,
+        email: authUser.email
+      }));
 
-    const conversationId = requestedConversationId || (await createConversation({
-      userId,
-      title: conversationTitle(message),
-      contextSnapshot: {
-        workflow: requestedWorkflow,
-        initialPrompt: message
-      },
-      memoryState: {},
-      metadata: {
-        source: "dashboard-chat",
-        authUserId,
-        ...(input.metadata ?? {})
-      }
-    })).id;
+    const conversationId = requestedConversationId || (await (timing
+      ? timing.time("chat.create_conversation", () => createConversation({
+        userId,
+        title: conversationTitle(message),
+        contextSnapshot: {
+          workflow: requestedWorkflow,
+          initialPrompt: message
+        },
+        memoryState: {},
+        metadata: {
+          source: "dashboard-chat",
+          authUserId,
+          ...(input.metadata ?? {})
+        }
+      }))
+      : createConversation({
+        userId,
+        title: conversationTitle(message),
+        contextSnapshot: {
+          workflow: requestedWorkflow,
+          initialPrompt: message
+        },
+        memoryState: {},
+        metadata: {
+          source: "dashboard-chat",
+          authUserId,
+          ...(input.metadata ?? {})
+        }
+      }))).id;
 
-    const userMessage = await addMessage({
-      userId,
-      conversationId,
-      role: "user",
-      content: message,
-      contentJson: {},
-      metadata: {
-        workflow: requestedWorkflow,
-        authUserId,
-        ...(input.metadata ?? {})
-      }
-    });
+    const userMessage = await (timing
+      ? timing.time("chat.save_user_message", () => addMessage({
+        userId,
+        conversationId,
+        role: "user",
+        content: message,
+        contentJson: {},
+        metadata: {
+          workflow: requestedWorkflow,
+          authUserId,
+          ...(input.metadata ?? {})
+        }
+      }))
+      : addMessage({
+        userId,
+        conversationId,
+        role: "user",
+        content: message,
+        contentJson: {},
+        metadata: {
+          workflow: requestedWorkflow,
+          authUserId,
+          ...(input.metadata ?? {})
+        }
+      }));
 
-    await touchConversation(userId, conversationId);
-    const memoryDetection = await memoryManager.detectAndStore({
-      userId,
-      message
-    });
-    const conversationState = await getConversationState(userId, conversationId);
+    await (timing
+      ? timing.time("chat.touch_after_user_message", () => touchConversation(userId, conversationId))
+      : touchConversation(userId, conversationId));
+    const memoryDetection = await (timing
+      ? timing.time("chat.memory_detection", () => memoryManager.detectAndStore({
+        userId,
+        message
+      }))
+      : memoryManager.detectAndStore({
+        userId,
+        message
+      }));
+    const conversationState = await (timing
+      ? timing.time("chat.load_conversation_state", () => getConversationState(userId, conversationId))
+      : getConversationState(userId, conversationId));
     const pendingValue = conversationState?.memoryState.pendingWorkflow;
     const pendingWorkflow = isPendingWorkflowState(pendingValue) ? pendingValue : null;
     const workflow = pendingWorkflow?.workflow ?? requestedWorkflow;
-    const creatorProfile = await fetchCreatorProfile(userId);
+    const creatorProfile = await (timing
+      ? timing.time("chat.fetch_creator_profile", () => fetchCreatorProfile(userId))
+      : fetchCreatorProfile(userId));
     const combinedMessage = pendingWorkflow
       ? `${pendingWorkflow.originalMessage}\n\nAdditional context from the user:\n${message}`
       : message;
-    const resolvedContext = await contextResolver.resolve({
-      userId,
-      conversationId,
-      workflow,
-      workflowId: typeof input.metadata?.workflowId === "string" ? input.metadata.workflowId : null,
-      message,
-      creatorProfile,
-      pendingWorkflow,
-      metadata: input.metadata
-    });
-    const evaluation = evaluateContextCompleteness({
-      workflow,
-      message,
-      creatorProfile,
-      metadata: input.metadata,
-      pendingContext: resolvedContext.context
-    });
+    const resolvedContext = await (timing
+      ? timing.time("chat.resolve_context", () => contextResolver.resolve({
+        userId,
+        conversationId,
+        workflow,
+        workflowId: typeof input.metadata?.workflowId === "string" ? input.metadata.workflowId : null,
+        message,
+        creatorProfile,
+        pendingWorkflow,
+        metadata: input.metadata
+      }))
+      : contextResolver.resolve({
+        userId,
+        conversationId,
+        workflow,
+        workflowId: typeof input.metadata?.workflowId === "string" ? input.metadata.workflowId : null,
+        message,
+        creatorProfile,
+        pendingWorkflow,
+        metadata: input.metadata
+      }));
+    const evaluation = timing
+      ? timing.timeSync("chat.evaluate_clarification", () => evaluateContextCompleteness({
+        workflow,
+        message,
+        creatorProfile,
+        metadata: input.metadata,
+        pendingContext: resolvedContext.context
+      }))
+      : evaluateContextCompleteness({
+        workflow,
+        message,
+        creatorProfile,
+        metadata: input.metadata,
+        pendingContext: resolvedContext.context
+      });
 
     if (evaluation.shouldAskQuestions) {
       const nextPendingWorkflow = pendingWorkflow
@@ -213,17 +288,29 @@ export class ChatService {
           originalMessage: message,
           evaluation
         });
-      await updateConversationState({
-        userId,
-        conversationId,
-        memoryState: {
-          pendingWorkflow: nextPendingWorkflow as unknown as JsonObject
-        },
-        metadata: {
-          clarificationStatus: "pending",
-          completenessScore: evaluation.completenessScore
-        }
-      });
+      await (timing
+        ? timing.time("chat.save_pending_workflow", () => updateConversationState({
+          userId,
+          conversationId,
+          memoryState: {
+            pendingWorkflow: nextPendingWorkflow as unknown as JsonObject
+          },
+          metadata: {
+            clarificationStatus: "pending",
+            completenessScore: evaluation.completenessScore
+          }
+        }))
+        : updateConversationState({
+          userId,
+          conversationId,
+          memoryState: {
+            pendingWorkflow: nextPendingWorkflow as unknown as JsonObject
+          },
+          metadata: {
+            clarificationStatus: "pending",
+            completenessScore: evaluation.completenessScore
+          }
+        }));
       const response = buildClarificationResponse({
         workflowTitle: typeof input.metadata?.workflowTitle === "string"
           ? input.metadata.workflowTitle
@@ -248,45 +335,91 @@ export class ChatService {
     }
 
     if (pendingWorkflow) {
-      await updateConversationState({
-        userId,
-        conversationId,
-        memoryState: {
-          pendingWorkflow: null
-        },
-        metadata: {
-          clarificationStatus: "resolved",
-          completenessScore: evaluation.completenessScore
-        }
-      });
+      await (timing
+        ? timing.time("chat.clear_pending_workflow", () => updateConversationState({
+          userId,
+          conversationId,
+          memoryState: {
+            pendingWorkflow: null
+          },
+          metadata: {
+            clarificationStatus: "resolved",
+            completenessScore: evaluation.completenessScore
+          }
+        }))
+        : updateConversationState({
+          userId,
+          conversationId,
+          memoryState: {
+            pendingWorkflow: null
+          },
+          metadata: {
+            clarificationStatus: "resolved",
+            completenessScore: evaluation.completenessScore
+          }
+        }));
     }
 
-    const context = await buildContextAssembly({
-      userId,
-      conversationId,
-      workflow,
-      topic: combinedMessage,
-      requestedAssetType: input.requestedAssetType,
-      selectedKnowledgeSourceIds: input.selectedKnowledgeSourceIds,
-      knowledgeSourceLimit: DEFAULT_KNOWLEDGE_SOURCE_LIMIT,
-      conversationLimit: 1,
-      messagesPerConversation: DEFAULT_MESSAGES_PER_CONVERSATION,
-      metadata: {
-        ...(input.metadata ?? {}),
-        userMessageId: userMessage.id,
-        memoryDetection: memoryDetection as unknown as JsonObject,
-        clarificationContext: evaluation.availableContext as unknown as JsonObject,
-        clarificationScore: evaluation.completenessScore,
-        contextResolver: {
-          usedConversationContext: resolvedContext.usedConversationContext,
-          conversationMessageCount: resolvedContext.conversationMessageCount,
-          sources: resolvedContext.sources
-        } as unknown as JsonObject
-      }
-    });
+    const context = await (timing
+      ? timing.time("chat.build_context_assembly", () => buildContextAssembly({
+        userId,
+        conversationId,
+        workflow,
+        topic: combinedMessage,
+        requestedAssetType: input.requestedAssetType,
+        selectedKnowledgeSourceIds: input.selectedKnowledgeSourceIds,
+        knowledgeSourceLimit: DEFAULT_KNOWLEDGE_SOURCE_LIMIT,
+        conversationLimit: 1,
+        messagesPerConversation: DEFAULT_MESSAGES_PER_CONVERSATION,
+        metadata: {
+          ...(input.metadata ?? {}),
+          userMessageId: userMessage.id,
+          memoryDetection: memoryDetection as unknown as JsonObject,
+          clarificationContext: evaluation.availableContext as unknown as JsonObject,
+          clarificationScore: evaluation.completenessScore,
+          contextResolver: {
+            usedConversationContext: resolvedContext.usedConversationContext,
+            conversationMessageCount: resolvedContext.conversationMessageCount,
+            sources: resolvedContext.sources
+          } as unknown as JsonObject
+        }
+      }))
+      : buildContextAssembly({
+        userId,
+        conversationId,
+        workflow,
+        topic: combinedMessage,
+        requestedAssetType: input.requestedAssetType,
+        selectedKnowledgeSourceIds: input.selectedKnowledgeSourceIds,
+        knowledgeSourceLimit: DEFAULT_KNOWLEDGE_SOURCE_LIMIT,
+        conversationLimit: 1,
+        messagesPerConversation: DEFAULT_MESSAGES_PER_CONVERSATION,
+        metadata: {
+          ...(input.metadata ?? {}),
+          userMessageId: userMessage.id,
+          memoryDetection: memoryDetection as unknown as JsonObject,
+          clarificationContext: evaluation.availableContext as unknown as JsonObject,
+          clarificationScore: evaluation.completenessScore,
+          contextResolver: {
+            usedConversationContext: resolvedContext.usedConversationContext,
+            conversationMessageCount: resolvedContext.conversationMessageCount,
+            sources: resolvedContext.sources
+          } as unknown as JsonObject
+        }
+      }));
 
-    const llmPrompt = new PromptBuilder(context).build(combinedMessage);
-    const finalPrompt = buildFinalPrompt(llmPrompt, input.responseInstructions);
+    const llmPrompt = timing
+      ? timing.timeSync("chat.build_prompt", () => new PromptBuilder(context).build(combinedMessage))
+      : new PromptBuilder(context).build(combinedMessage);
+    const finalPrompt = timing
+      ? timing.timeSync("chat.compose_final_prompt", () => buildFinalPrompt(llmPrompt, input.responseInstructions))
+      : buildFinalPrompt(llmPrompt, input.responseInstructions);
+    timing?.mark("chat.final_prompt_ready", {
+      finalPromptChars: finalPrompt.length,
+      contextPromptChars: llmPrompt.contextPrompt.length,
+      systemPromptChars: llmPrompt.systemPrompt.length,
+      userPromptChars: llmPrompt.userPrompt.length
+    });
 
     return {
       kind: "ready",
@@ -323,7 +456,8 @@ export class ChatService {
       },
       responseInstructions: input.responseInstructions,
       maxTokens: input.maxTokens,
-      temperature: input.temperature
+      temperature: input.temperature,
+      timing: input.timing
     });
 
     return {

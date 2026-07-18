@@ -62,8 +62,27 @@ const workflowSystemPrompts: Record<ContextWorkflow, string> = {
   ].join("\n")
 };
 
-function compactJson(value: unknown) {
-  return JSON.stringify(value ?? {}, null, 2);
+function compactJson(value: unknown, maxChars = 900) {
+  const text = JSON.stringify(value ?? {});
+  if (!text || text === "{}" || text === "[]") return "";
+  return text.length > maxChars ? `${text.slice(0, maxChars).trim()}...` : text;
+}
+
+function truncateText(value: unknown, maxChars = 900) {
+  if (typeof value !== "string") return "";
+  const trimmed = value.replace(/\s+/g, " ").trim();
+  if (!trimmed) return "";
+  return trimmed.length > maxChars ? `${trimmed.slice(0, maxChars).trim()}...` : trimmed;
+}
+
+function formatLine(label: string, value: unknown) {
+  const text = Array.isArray(value)
+    ? value.filter(Boolean).join(", ")
+    : typeof value === "object"
+      ? compactJson(value)
+      : truncateText(String(value ?? ""));
+
+  return text && text !== "Not set" ? `${label}: ${text}` : "";
 }
 
 function formatCreatorProfile(profile: ContextCreatorProfile | null) {
@@ -72,33 +91,30 @@ function formatCreatorProfile(profile: ContextCreatorProfile | null) {
   }
 
   return [
-    `Creator name: ${profile.creatorName ?? "Not set"}`,
-    `Brand name: ${profile.brandName ?? "Not set"}`,
-    `Tagline: ${profile.tagline ?? "Not set"}`,
-    `Bio: ${profile.bio ?? "Not set"}`,
-    `Experience level: ${profile.experienceLevel ?? "Not set"}`,
-    `Archetypes: ${profile.archetypes.length ? profile.archetypes.join(", ") : "Not set"}`,
-    `Goals: ${compactJson(profile.goals)}`,
-    `Niche: ${compactJson(profile.niche)}`,
-    `Audience: ${compactJson(profile.audience)}`,
-    `Platform preferences: ${compactJson(profile.platformPreferences)}`,
-    `Writing preferences: ${compactJson(profile.writingPreferences)}`,
-    `AI controls: ${compactJson(profile.aiControls)}`,
-    `Memory: ${compactJson(profile.memory)}`
-  ].join("\n");
+    formatLine("Creator name", profile.creatorName),
+    formatLine("Brand name", profile.brandName),
+    formatLine("Tagline", profile.tagline),
+    formatLine("Bio", profile.bio),
+    formatLine("Experience level", profile.experienceLevel),
+    formatLine("Archetypes", profile.archetypes),
+    formatLine("Goals", profile.goals),
+    formatLine("Niche", profile.niche),
+    formatLine("Audience", profile.audience),
+    formatLine("Platform preferences", profile.platformPreferences),
+    formatLine("Writing preferences", profile.writingPreferences),
+    formatLine("AI controls", profile.aiControls)
+  ].filter(Boolean).join("\n") || "Creator profile exists but has no filled fields yet.";
 }
 
 function formatKnowledgeSource(source: ContextKnowledgeSource, index: number) {
   return [
     `[${index + 1}] ${source.title}`,
     `Type: ${source.sourceType}`,
-    `URL: ${source.url ?? "Not available"}`,
-    `Tags: ${source.tags.length ? source.tags.join(", ") : "None"}`,
-    `Summary: ${source.summary ?? "No summary available"}`,
-    `Similarity: ${source.similarity.toFixed(4)}`,
-    `Extracted text snippet: ${source.extractedTextSnippet ?? "No extracted text available"}`,
-    `Metadata: ${compactJson(source.metadata)}`
-  ].join("\n");
+    source.url ? `URL: ${source.url}` : "",
+    source.tags.length ? `Tags: ${source.tags.join(", ")}` : "",
+    source.summary ? `Summary: ${truncateText(source.summary, 500)}` : "",
+    source.extractedTextSnippet ? `Extracted text: ${truncateText(source.extractedTextSnippet, 800)}` : ""
+  ].filter(Boolean).join("\n");
 }
 
 function formatKnowledgeSources(sources: ContextKnowledgeSource[]) {
@@ -112,15 +128,12 @@ function formatKnowledgeSources(sources: ContextKnowledgeSource[]) {
 function formatConversation(conversation: ContextConversation, index: number) {
   const messages = conversation.recentMessages.length
     ? conversation.recentMessages
-        .map((message) => `- ${message.role}: ${message.content ?? compactJson(message.contentJson)}`)
+        .map((message) => `- ${message.role}: ${truncateText(message.content ?? compactJson(message.contentJson, 500), 700)}`)
         .join("\n")
     : "No recent messages available.";
 
   return [
     `[${index + 1}] ${conversation.title ?? "Untitled conversation"}`,
-    `Status: ${conversation.status}`,
-    `Context snapshot: ${compactJson(conversation.contextSnapshot)}`,
-    `Memory state: ${compactJson(conversation.memoryState)}`,
     `Recent messages:`,
     messages
   ].join("\n");
@@ -143,18 +156,15 @@ function formatMemorySummary(context: ContextAssembly) {
     `Confidence: ${context.memorySummary.confidence ?? "Not scored"}`,
     `Last detection: ${context.memorySummary.lastDetectionAt ?? "Unknown"}`,
     `Categories: ${context.memorySummary.categories.length ? context.memorySummary.categories.join(", ") : "None"}`,
-    `Durable facts: ${compactJson(context.memorySummary.durableFacts)}`
-  ].join("\n");
+    `Durable facts: ${compactJson(context.memorySummary.durableFacts, 1200)}`
+  ].filter(Boolean).join("\n");
 }
 
 export function buildContextPrompt(context: ContextAssembly) {
   return [
-    "# Innkwise Context Assembly",
-    `Version: ${context.version}`,
-    `Assembled at: ${context.assembledAt}`,
+    "# Innkwise Context",
     `Workflow: ${context.workflow}`,
     `Topic: ${context.topic ?? "Not provided"}`,
-    `Requested asset type: ${context.requestedAssetType ?? "Not provided"}`,
     "",
     "## Creator Profile",
     formatCreatorProfile(context.creatorProfile),
@@ -166,13 +176,7 @@ export function buildContextPrompt(context: ContextAssembly) {
     formatRecentConversations(context.recentConversations),
     "",
     "## Memory Summary",
-    formatMemorySummary(context),
-    "",
-    "## Memory Expansion Surface",
-    compactJson(context.memory),
-    "",
-    "## Request Metadata",
-    compactJson(context.metadata)
+    formatMemorySummary(context)
   ].join("\n");
 }
 

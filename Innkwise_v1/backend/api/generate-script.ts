@@ -6,10 +6,12 @@ import {
   type ChatServiceReadyTurn
 } from "@/backend/chat/chat-service";
 import { advisorLayer } from "@/lib/advisor/advisor-layer";
+import { toCreatorUserId } from "@/backend/auth/identifiers";
 import { withApiAuth, type AuthenticatedApiRequest } from "@/lib/auth/auth-middleware";
 import { verifyConversationOwnership } from "@/lib/auth/authorization";
 import { isApiError } from "@/lib/auth/errors";
 import { GatewayError } from "@/lib/ai/gateway/GatewayErrors";
+import { TimingTracker } from "@/lib/observability/timing";
 import { responseFormatter } from "@/lib/formatting/response-formatter";
 import { isRateLimitError } from "@/lib/rate-limit/RateLimitErrors";
 import { inputValidator } from "@/lib/validation/InputValidator";
@@ -181,6 +183,42 @@ ${buildCaseStudyRule(includeCaseStudy)}
 `;
 }
 
+function compactWorkflowDepthGuidance(workflowId: WorkflowId) {
+  if (workflowId === "research-topic") {
+    return [
+      "Create 5 sections: Topic Overview, Key Findings, Audience Questions and Misconceptions, Evidence and Caveats, Creator Content Angles.",
+      "Include 5-8 specific findings, 5 audience questions or misconceptions, clear caveats, and 5-7 creator angles.",
+      "Do not fabricate citations, statistics, experts, or institutions."
+    ].join("\n");
+  }
+
+  if (workflowId === "content-strategy") {
+    return [
+      "Create 5 sections: Strategic objective, Content pillars, Angle map, Publishing cadence, Measurement plan.",
+      "Include 4-6 pillars, 8-12 specific angles, a weekly cadence, and clear measurement signals.",
+      "Make concrete recommendations and tradeoffs for this creator, audience, platform, and goal."
+    ].join("\n");
+  }
+
+  if (workflowId === "production-kit") {
+    return [
+      "Create 5 sections: Shot list, Scene notes, Asset checklist, Thumbnail direction, Editing plan.",
+      "Include 8-15 sequenced shots, practical scene direction, required assets, 3 thumbnail concepts, and editing notes.",
+      "Make the plan executable for a creator or editor."
+    ].join("\n");
+  }
+
+  if (workflowId === "posting-strategy") {
+    return [
+      "Create 5 sections: Primary post package, Repurposing plan, Captions and titles, Posting sequence, Metrics to watch.",
+      "Include platform-native packaging, 5-8 derivatives, 5 title options, 3 caption approaches, and iteration rules.",
+      "Make the plan specific to the platform and objective."
+    ].join("\n");
+  }
+
+  return "Make the response specific, actionable, and easy to scan.";
+}
+
 function extractJsonBlock(text: string): string {
   const jsonStart = text.indexOf("{");
   const jsonEnd = text.lastIndexOf("}") + 1;
@@ -196,6 +234,26 @@ function cleanJsonString(jsonString: string): string {
   return jsonString
     .replace(/,\s*([}\]])/g, "$1")
     .replace(/[\u0000-\u001F]+/g, " ")
+    .trim();
+}
+
+function cleanAssistantMarkdown(text: string): string {
+  return text
+    .replace(/^```(?:markdown|md|json)?\s*/i, "")
+    .replace(/```$/i, "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .filter((line) => {
+      const normalized = line.trim().replace(/^["']+/, "").toLowerCase();
+      return !(
+        normalized.startsWith("workflow_id:")
+        || normalized.startsWith("workflow title:")
+        || normalized.startsWith("workflow_title:")
+        || normalized === "workflow output"
+      );
+    })
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
@@ -548,18 +606,23 @@ async function handler(req: AuthenticatedApiRequest, res: NextApiResponse) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  const timing = new TimingTracker("api.generate-script");
+
   try {
     if (!isValidBody(req.body)) {
       return res.status(400).json({ error: "Invalid request body." });
     }
 
     const requestedWorkflowTemplate = getWorkflowTemplate(req.body.workflowId);
-    const validatedChatRequest = await inputValidator.validateChatRequest(req.auth.id, {
-      prompt: req.body.topic,
-      workflowType: requestedWorkflowTemplate.workflowType,
-      conversationId: req.body.conversationId,
-      attachments: []
-    });
+    const creatorUserId = toCreatorUserId(req.auth.id);
+    const validatedChatRequest = await timing.time("api.validate_chat_request", () =>
+      inputValidator.validateChatRequest(creatorUserId, {
+        prompt: req.body.topic,
+        workflowType: requestedWorkflowTemplate.workflowType,
+        conversationId: req.body.conversationId,
+        attachments: []
+      })
+    );
     req.body.topic = validatedChatRequest.prompt;
     req.body.conversationId = validatedChatRequest.conversationId;
 
@@ -588,7 +651,8 @@ async function handler(req: AuthenticatedApiRequest, res: NextApiResponse) {
         workflow: workflowTemplate.workflowType,
         conversationId: req.body.conversationId,
         requestedAssetType: workflowTemplate.id === "generate-script" ? "script" : "other",
-        metadata: workflowMetadata
+        metadata: workflowMetadata,
+        timing
       });
       if (turn.kind === "clarification") {
         return res.status(200).json(await buildClarificationPayload({
@@ -764,7 +828,7 @@ POSTING STRATEGY DEPTH REQUIREMENTS:
 - Put concise strategic context in each content field and detailed packaging, scheduling, and measurement actions in items.
 `
         : "";
-      const responseInstructions = `Return ONLY valid JSON in this exact shape:
+      let responseInstructions = `Return ONLY valid JSON in this exact shape:
 
 {
   "workflow_output": {
@@ -810,6 +874,26 @@ ${distributionInstructions}
 ${isCreatorChat ? "- Keep Creator Chat responses natural and flexible. Put a simple answer in summary and leave sections empty when headings would feel forced." : ""}
 `;
 
+      responseInstructions = isCreatorChat
+        ? [
+          "Return clean Markdown, not JSON.",
+          "Answer like a human creator advisor continuing the conversation.",
+          "Do not use generic headings such as Summary, Answer, Generated Content, or Workflow Output.",
+          "Use short bullets when listing ideas, steps, or recommendations.",
+          "Keep it practical and centered on content creation.",
+          "Never mention workflow IDs, backend tags, metadata, JSON, or internal context."
+        ].join("\n")
+        : [
+          "Return ONLY valid compact JSON. No prose outside JSON.",
+          `Use workflow_id "${workflowTemplate.id}" and workflow_title "${workflowTemplate.title}" only as JSON fields, never inside user-facing text.`,
+          "Shape: {\"workflow_output\":{\"workflow_id\":\"\",\"workflow_title\":\"\",\"summary\":\"\",\"sections\":[{\"title\":\"\",\"content\":\"\",\"items\":[]}],\"next_steps\":[],\"recommended_workflows\":[]}}",
+          `Required section guidance:\n${compactWorkflowDepthGuidance(workflowTemplate.id)}`,
+          "Summary must be a natural conversational opening of 1-2 sentences.",
+          "Content fields should be concise. Put detailed actionable points in items.",
+          "Leave next_steps and recommended_workflows empty.",
+          "Never output backend tags, metadata, raw field names in text, HTML, or markdown code fences."
+        ].join("\n");
+
       const generation = await chatService.generate({
         req,
         message: req.body.topic,
@@ -819,30 +903,44 @@ ${isCreatorChat ? "- Keep Creator Chat responses natural and flexible. Put a sim
         metadata: workflowMetadata,
         responseInstructions,
         maxTokens: workflowTemplate.id === "creator-chat"
-          ? 2600
+          ? 1100
           : workflowTemplate.id === "research-topic"
-            ? 4200
-            : 4000
+            ? 2200
+            : 2000,
+        timing
       });
       if (generation.kind === "clarification") {
-        return res.status(200).json(await buildClarificationPayload({
+        const payload = await timing.time("api.build_clarification_payload", () => buildClarificationPayload({
           generation,
           template: workflowTemplate,
           metadata: workflowMetadata
         }));
+        timing.log({
+          workflowId: workflowTemplate.id,
+          workflowType: workflowTemplate.workflowType,
+          success: true,
+          responseType: "clarification"
+        });
+        return res.status(200).json(payload);
       }
-      const parsed = await parseOrRepairWorkflowOutput(generation.rawText, workflowTemplate);
-      const advisorMarkdown = buildAdvisorMarkdown({
-        generation,
-        userMessage: req.body.topic,
-        rawOutput: parsed
-      });
+      const parsed = await timing.time("api.parse_or_repair_workflow_output", () =>
+        parseOrRepairWorkflowOutput(generation.rawText, workflowTemplate)
+      );
+      const advisorMarkdown = timing.timeSync("api.format_advisor_markdown", () =>
+        isCreatorChat
+          ? cleanAssistantMarkdown(generation.rawText)
+          : buildAdvisorMarkdown({
+            generation,
+            userMessage: req.body.topic,
+            rawOutput: parsed
+          })
+      );
       const responsePayload = {
         ...parsed,
         conversation_id: generation.conversationId,
         advisor_markdown: advisorMarkdown
       };
-      await chatService.finishTurn({
+      await timing.time("api.save_assistant_message", () => chatService.finishTurn({
         userId: generation.userId,
         conversationId: generation.conversationId,
         assistantContent: advisorMarkdown,
@@ -853,6 +951,12 @@ ${isCreatorChat ? "- Keep Creator Chat responses natural and flexible. Put a sim
           result: responsePayload as unknown as JsonObject
         }),
         metadata: workflowMetadata
+      }));
+      timing.log({
+        workflowId: workflowTemplate.id,
+        workflowType: workflowTemplate.workflowType,
+        success: true,
+        responseChars: advisorMarkdown.length
       });
       return res.status(200).json(responsePayload);
     }
@@ -892,27 +996,35 @@ ${buildContentToggleRules(req.body.includeResearch, req.body.includeCaseStudy)}
         requestedAssetType: "script",
         metadata: workflowMetadata,
         responseInstructions,
-        maxTokens: shortsDuration === 1 ? 800 : shortsDuration === 2 ? 1100 : 1400
+        maxTokens: shortsDuration === 1 ? 800 : shortsDuration === 2 ? 1100 : 1400,
+        timing
       });
       if (generation.kind === "clarification") {
-        return res.status(200).json(await buildClarificationPayload({
+        const payload = await timing.time("api.build_clarification_payload", () => buildClarificationPayload({
           generation,
           template: workflowTemplate,
           metadata: workflowMetadata
         }));
+        timing.log({
+          workflowId: workflowTemplate.id,
+          workflowType: workflowTemplate.workflowType,
+          success: true,
+          responseType: "clarification"
+        });
+        return res.status(200).json(payload);
       }
-      const parsed = await parseOrRepairShorts(generation.rawText);
-      const advisorMarkdown = buildAdvisorMarkdown({
+      const parsed = await timing.time("api.parse_or_repair_shorts", () => parseOrRepairShorts(generation.rawText));
+      const advisorMarkdown = timing.timeSync("api.format_advisor_markdown", () => buildAdvisorMarkdown({
         generation,
         userMessage: req.body.topic,
         rawOutput: parsed
-      });
+      }));
       const responsePayload = {
         ...parsed,
         conversation_id: generation.conversationId,
         advisor_markdown: advisorMarkdown
       };
-      await chatService.finishTurn({
+      await timing.time("api.save_assistant_message", () => chatService.finishTurn({
         userId: generation.userId,
         conversationId: generation.conversationId,
         assistantContent: advisorMarkdown,
@@ -923,6 +1035,12 @@ ${buildContentToggleRules(req.body.includeResearch, req.body.includeCaseStudy)}
           result: responsePayload as unknown as JsonObject
         }),
         metadata: workflowMetadata
+      }));
+      timing.log({
+        workflowId: workflowTemplate.id,
+        workflowType: workflowTemplate.workflowType,
+        success: true,
+        responseChars: advisorMarkdown.length
       });
       return res.status(200).json(responsePayload);
     }
@@ -974,34 +1092,42 @@ ${timeline}
       requestedAssetType: "script",
       metadata: workflowMetadata,
       responseInstructions,
-      maxTokens: 3000
+      maxTokens: 2600,
+      timing
     });
     if (generation.kind === "clarification") {
-      return res.status(200).json(await buildClarificationPayload({
+      const payload = await timing.time("api.build_clarification_payload", () => buildClarificationPayload({
         generation,
         template: workflowTemplate,
         metadata: workflowMetadata
       }));
+      timing.log({
+        workflowId: workflowTemplate.id,
+        workflowType: workflowTemplate.workflowType,
+        success: true,
+        responseType: "clarification"
+      });
+      return res.status(200).json(payload);
     }
-    const parsed = await parseOrRepairLongForm(generation.rawText);
-    const enriched = await ensureHooksAndTitles(
+    const parsed = await timing.time("api.parse_or_repair_long_form", () => parseOrRepairLongForm(generation.rawText));
+    const enriched = await timing.time("api.ensure_hooks_and_titles", () => ensureHooksAndTitles(
       parsed,
       req.body.topic,
       req.body.audience,
       req.body.tone
-    );
-    const advisorMarkdown = buildAdvisorMarkdown({
+    ));
+    const advisorMarkdown = timing.timeSync("api.format_advisor_markdown", () => buildAdvisorMarkdown({
       generation,
       userMessage: req.body.topic,
       rawOutput: enriched
-    });
+    }));
 
     const responsePayload = {
       ...enriched,
       conversation_id: generation.conversationId,
       advisor_markdown: advisorMarkdown
     };
-    await chatService.finishTurn({
+    await timing.time("api.save_assistant_message", () => chatService.finishTurn({
       userId: generation.userId,
       conversationId: generation.conversationId,
       assistantContent: advisorMarkdown,
@@ -1012,10 +1138,20 @@ ${timeline}
         result: responsePayload as unknown as JsonObject
       }),
       metadata: workflowMetadata
+    }));
+    timing.log({
+      workflowId: workflowTemplate.id,
+      workflowType: workflowTemplate.workflowType,
+      success: true,
+      responseChars: advisorMarkdown.length
     });
 
     return res.status(200).json(responsePayload);
   } catch (error) {
+    timing.log({
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error"
+    });
     if (isApiError(error)) throw error;
     if (isRateLimitError(error)) {
       return res.status(200).json(error.toResponse());
