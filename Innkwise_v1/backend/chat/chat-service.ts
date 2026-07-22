@@ -2,6 +2,7 @@ import type { NextApiRequest } from "next";
 import {
   buildContextAssembly,
   fetchCreatorProfile,
+  fetchRecentConversations,
   type ContextAssembly,
   type ContextWorkflow
 } from "@/backend/context/context-engine";
@@ -211,9 +212,6 @@ export class ChatService {
         }
       }));
 
-    await (timing
-      ? timing.time("chat.touch_after_user_message", () => touchConversation(userId, conversationId))
-      : touchConversation(userId, conversationId));
     const memoryDetection = await (timing
       ? timing.time("chat.memory_detection", () => memoryManager.detectAndStore({
         userId,
@@ -223,15 +221,35 @@ export class ChatService {
         userId,
         message
       }));
-    const conversationState = await (timing
-      ? timing.time("chat.load_conversation_state", () => getConversationState(userId, conversationId))
-      : getConversationState(userId, conversationId));
+    const budgetSeed = tokenBudgetEngine.getBudget({
+      workflow: requestedWorkflow,
+      requestedAssetType: input.requestedAssetType,
+      metadata: input.metadata
+    });
+    const [conversationState, creatorProfile, recentConversations] = await Promise.all([
+      timing
+        ? timing.time("chat.load_conversation_state", () => getConversationState(userId, conversationId))
+        : getConversationState(userId, conversationId),
+      timing
+        ? timing.time("chat.fetch_creator_profile", () => fetchCreatorProfile(userId))
+        : fetchCreatorProfile(userId),
+      timing
+        ? timing.time("chat.fetch_recent_conversations", () => fetchRecentConversations({
+          userId,
+          conversationId,
+          limit: budgetSeed.conversationLimit,
+          messagesPerConversation: Math.max(budgetSeed.messagesPerConversation, 10)
+        }))
+        : fetchRecentConversations({
+          userId,
+          conversationId,
+          limit: budgetSeed.conversationLimit,
+          messagesPerConversation: Math.max(budgetSeed.messagesPerConversation, 10)
+        })
+    ]);
     const pendingValue = conversationState?.memoryState.pendingWorkflow;
     const pendingWorkflow = isPendingWorkflowState(pendingValue) ? pendingValue : null;
     const workflow = pendingWorkflow?.workflow ?? requestedWorkflow;
-    const creatorProfile = await (timing
-      ? timing.time("chat.fetch_creator_profile", () => fetchCreatorProfile(userId))
-      : fetchCreatorProfile(userId));
     const combinedMessage = pendingWorkflow
       ? `${pendingWorkflow.originalMessage}\n\nAdditional context from the user:\n${message}`
       : message;
@@ -244,6 +262,7 @@ export class ChatService {
         message,
         creatorProfile,
         pendingWorkflow,
+        recentConversations,
         metadata: input.metadata
       }))
       : contextResolver.resolve({
@@ -254,6 +273,7 @@ export class ChatService {
         message,
         creatorProfile,
         pendingWorkflow,
+        recentConversations,
         metadata: input.metadata
       }));
     const evaluation = timing
@@ -376,6 +396,8 @@ export class ChatService {
         conversationLimit: budget.conversationLimit,
         messagesPerConversation: budget.messagesPerConversation,
         extractedTextSnippetChars: budget.snippetChars,
+        creatorProfile,
+        recentConversations,
         metadata: {
           ...(input.metadata ?? {}),
           tokenBudget: budget as unknown as JsonObject,
@@ -401,6 +423,8 @@ export class ChatService {
         conversationLimit: budget.conversationLimit,
         messagesPerConversation: budget.messagesPerConversation,
         extractedTextSnippetChars: budget.snippetChars,
+        creatorProfile,
+        recentConversations,
         metadata: {
           ...(input.metadata ?? {}),
           tokenBudget: budget as unknown as JsonObject,
@@ -465,6 +489,7 @@ export class ChatService {
       responseInstructions: input.responseInstructions,
       maxTokens: input.maxTokens,
       temperature: input.temperature,
+      inputValidated: true,
       timing: input.timing
     });
 

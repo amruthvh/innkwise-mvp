@@ -43,6 +43,7 @@ export type PreparedGatewayInput = {
   responseInstructions?: string;
   operation?: RateLimitOperation;
   rateLimitChecked?: boolean;
+  inputValidated?: boolean;
   maxTokens?: number;
   temperature?: number;
   timing?: TimingTracker;

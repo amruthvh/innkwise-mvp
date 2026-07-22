@@ -6,7 +6,6 @@ import {
   type ChatServiceReadyTurn
 } from "@/backend/chat/chat-service";
 import { advisorLayer } from "@/lib/advisor/advisor-layer";
-import { toCreatorUserId } from "@/backend/auth/identifiers";
 import { withApiAuth, type AuthenticatedApiRequest } from "@/lib/auth/auth-middleware";
 import { verifyConversationOwnership } from "@/lib/auth/authorization";
 import { isApiError } from "@/lib/auth/errors";
@@ -15,7 +14,6 @@ import { tokenBudgetEngine } from "@/lib/context/token-budget-engine";
 import { TimingTracker } from "@/lib/observability/timing";
 import { responseFormatter } from "@/lib/formatting/response-formatter";
 import { isRateLimitError } from "@/lib/rate-limit/RateLimitErrors";
-import { inputValidator } from "@/lib/validation/InputValidator";
 import { isInputValidationError } from "@/lib/validation/ValidationErrors";
 import { getWorkflowTemplate, workflowTemplates, type WorkflowId } from "@/lib/workflows/registry";
 import type { JsonObject } from "@/shared/types/creator-os";
@@ -651,18 +649,6 @@ async function handler(req: AuthenticatedApiRequest, res: NextApiResponse) {
     }
 
     const requestedWorkflowTemplate = getWorkflowTemplate(req.body.workflowId);
-    const creatorUserId = toCreatorUserId(req.auth.id);
-    const validatedChatRequest = await timing.time("api.validate_chat_request", () =>
-      inputValidator.validateChatRequest(creatorUserId, {
-        prompt: req.body.topic,
-        workflowType: requestedWorkflowTemplate.workflowType,
-        conversationId: req.body.conversationId,
-        attachments: []
-      })
-    );
-    req.body.topic = validatedChatRequest.prompt;
-    req.body.conversationId = validatedChatRequest.conversationId;
-
     const isShorts = req.body.videoType === "shorts";
     const shortsDuration = Math.min(3, Math.max(1, Math.round(req.body.length)));
     const workflowTemplate = requestedWorkflowTemplate;

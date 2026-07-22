@@ -332,8 +332,7 @@ const thinkingStages = [
   "Ranking relevant memories",
   "Checking useful knowledge sources",
   "Compressing context for the model",
-  "Drafting the answer",
-  "Polishing for readability"
+  "Drafting the answer"
 ];
 const shortcutTemplates = getShortcutTemplates();
 const defaultAudienceType = "Creators";
@@ -620,8 +619,8 @@ export default function Dashboard() {
     }
 
     const interval = window.setInterval(() => {
-      setThinkingStageIndex((current) => (current + 1) % thinkingStages.length);
-    }, 3600);
+      setThinkingStageIndex((current) => Math.min(current + 1, thinkingStages.length - 1));
+    }, 1800);
 
     return () => window.clearInterval(interval);
   }, [loading]);

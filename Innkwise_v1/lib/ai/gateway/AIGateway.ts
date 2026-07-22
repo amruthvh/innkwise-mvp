@@ -232,25 +232,29 @@ export class AIGateway {
           ...(input.metadata ?? {})
         }
       };
-      const validated = await (timing
-        ? timing.time("gateway.validate_input", () => inputValidator.validateChatRequest(input.userId, {
-          prompt: input.prompt,
-          workflowType: input.workflowType,
-          conversationId: input.conversationId,
-          attachments: []
-        }))
-        : inputValidator.validateChatRequest(input.userId, {
-          prompt: input.prompt,
-          workflowType: input.workflowType,
-          conversationId: input.conversationId,
-          attachments: []
-        }));
-      input = {
-        ...input,
-        prompt: validated.prompt,
-        workflowType: validated.workflowType,
-        conversationId: validated.conversationId ?? input.conversationId
-      };
+      if (!input.inputValidated) {
+        const validated = await (timing
+          ? timing.time("gateway.validate_input", () => inputValidator.validateChatRequest(input.userId, {
+            prompt: input.prompt,
+            workflowType: input.workflowType,
+            conversationId: input.conversationId,
+            attachments: []
+          }))
+          : inputValidator.validateChatRequest(input.userId, {
+            prompt: input.prompt,
+            workflowType: input.workflowType,
+            conversationId: input.conversationId,
+            attachments: []
+          }));
+        input = {
+          ...input,
+          prompt: validated.prompt,
+          workflowType: validated.workflowType,
+          conversationId: validated.conversationId ?? input.conversationId
+        };
+      } else {
+        timing?.mark("gateway.validate_input_skipped");
+      }
       let checkedQuota: QuotaState | undefined;
       if (!input.rateLimitChecked) {
         checkedQuota = await (timing

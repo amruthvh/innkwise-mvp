@@ -88,6 +88,8 @@ export type BuildContextOptions = ContextAssemblyInput & {
   conversationLimit?: number;
   messagesPerConversation?: number;
   extractedTextSnippetChars?: number;
+  creatorProfile?: ContextCreatorProfile | null;
+  recentConversations?: ContextConversation[];
 };
 
 type DbRow = Record<string, unknown>;
@@ -294,7 +296,9 @@ export async function buildContextAssembly(options: BuildContextOptions): Promis
     "";
 
   const [creatorProfile, relevantKnowledgeSources, recentConversations] = await Promise.all([
-    fetchCreatorProfile(options.userId),
+    options.creatorProfile !== undefined
+      ? Promise.resolve(options.creatorProfile)
+      : fetchCreatorProfile(options.userId),
     fetchRelevantKnowledgeSources({
       userId: options.userId,
       query: retrievalQuery,
@@ -302,12 +306,14 @@ export async function buildContextAssembly(options: BuildContextOptions): Promis
       limit: limits.knowledgeSourceLimit,
       snippetChars: limits.extractedTextSnippetChars
     }),
-    fetchRecentConversations({
-      userId: options.userId,
-      conversationId: options.conversationId,
-      limit: limits.conversationLimit,
-      messagesPerConversation: limits.messagesPerConversation
-    })
+    options.recentConversations
+      ? Promise.resolve(options.recentConversations)
+      : fetchRecentConversations({
+        userId: options.userId,
+        conversationId: options.conversationId,
+        limit: limits.conversationLimit,
+        messagesPerConversation: limits.messagesPerConversation
+      })
   ]);
 
   return {

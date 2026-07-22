@@ -1,5 +1,6 @@
 import {
   fetchRecentConversations,
+  type ContextConversation,
   type ContextCreatorProfile,
   type ContextMessage,
   type ContextWorkflow
@@ -33,6 +34,7 @@ export type ResolveCreatorContextInput = {
   message: string;
   creatorProfile: ContextCreatorProfile | null;
   pendingWorkflow?: PendingWorkflowState | null;
+  recentConversations?: ContextConversation[];
   metadata?: JsonObject;
 };
 
@@ -205,7 +207,7 @@ function metadataValue(metadata: JsonObject | undefined, field: ClarificationFie
 export async function resolveCreatorContext(input: ResolveCreatorContextInput): Promise<ResolvedCreatorContext> {
   const shortcut = getCreatorShortcut(input.workflowId) ?? getCreatorShortcutByWorkflow(input.workflow);
   const isInvocation = isShortcutInvocation(input.message, shortcut);
-  const conversations = await fetchRecentConversations({
+  const conversations = input.recentConversations ?? await fetchRecentConversations({
     userId: input.userId,
     conversationId: input.conversationId,
     limit: 1,
