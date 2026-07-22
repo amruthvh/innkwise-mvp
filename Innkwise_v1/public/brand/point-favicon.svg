@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Innkwise point</title>
+  <rect width="64" height="64" rx="14" fill="#0A0B0B"/>
+  <circle cx="32" cy="32" r="23" fill="none" stroke="#F1EFE9" stroke-width="2"/>
+  <path d="M32.2 27.6c2.5.1 4.3 1.9 4.1 4.6-.2 2.5-2 4.2-4.7 4.1-2.4-.1-4.1-1.8-4-4.5.1-2.4 1.9-4.3 4.6-4.2Z" fill="#D4DDCF"/>
+</svg>

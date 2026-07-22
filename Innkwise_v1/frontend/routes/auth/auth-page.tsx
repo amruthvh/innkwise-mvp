@@ -3,9 +3,10 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
-import { Eye, EyeOff } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, LockKeyhole } from "lucide-react";
 import { signIn, useSession } from "next-auth/react";
 import { storeAuthToken } from "@/frontend/auth/auth-token-storage";
+import { BrandLockup, PointMark } from "@/frontend/components/innkwise-brand";
 
 type ContinueResponse = {
   token: string;
@@ -64,6 +65,19 @@ export default function AuthPage() {
       .get<Record<string, unknown>>("/api/auth/providers")
       .then((res) => setGoogleEnabled(Boolean(res.data?.google)))
       .catch(() => setGoogleEnabled(false));
+  }, []);
+
+  useEffect(() => {
+    const params = new URL(window.location.href).searchParams;
+    const requestedMode = params.get("mode");
+    const requestedEmail = params.get("email");
+
+    if (requestedMode === "signup" || requestedMode === "create") {
+      setAccessMode("signup");
+    }
+    if (requestedEmail) {
+      setIdentifier(requestedEmail);
+    }
   }, []);
 
   useEffect(() => {
@@ -188,209 +202,137 @@ export default function AuthPage() {
       ? "Connecting to Google..."
       : "Continue with Google";
 
+  const fieldClass = "h-14 w-full rounded-xl border border-black/[0.12] bg-white/45 px-4 text-base text-[#0a0b0b] outline-none transition placeholder:text-[#929791] hover:border-black/25 focus:border-black/35 focus:bg-white/70 focus:shadow-none";
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#050816] px-4 py-6 sm:px-6">
-      <div className="mx-auto w-full max-w-md rounded-[1.5rem] border border-white/10 bg-[#0b1020]/90 px-5 py-6 shadow-[0_20px_70px_rgba(15,23,42,0.35)] sm:px-6 sm:py-7">
-        <div className="mx-auto max-w-sm">
-          <div className="mb-5 flex justify-center">
-            <div className="flex items-center gap-2.5 text-xs font-semibold tracking-[0.22em] text-white">
-              <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-cyan-400/30 bg-cyan-400/10 text-[11px] text-cyan-300 shadow-[0_0_30px_rgba(34,211,238,0.14)]">
-                IN
-              </span>
-              <span>Innkwise</span>
-            </div>
+    <main className="min-h-screen bg-[#f1efe9] text-[#0a0b0b]">
+      <div className="mx-auto grid min-h-screen max-w-[1440px] lg:grid-cols-[0.95fr_1.05fr]">
+        <section className="relative hidden overflow-hidden border-r border-black/[0.08] bg-[#d4ddcf] p-12 lg:flex lg:flex-col lg:justify-between xl:p-16">
+          <div aria-hidden="true" className="absolute -left-36 top-1/2 h-[34rem] w-[34rem] -translate-y-1/2 rounded-full border border-black/[0.08]" />
+          <div aria-hidden="true" className="absolute -left-20 top-1/2 h-[22rem] w-[22rem] -translate-y-1/2 rounded-full border border-black/[0.08]" />
+          <a href="https://innkwise.com" aria-label="Visit Innkwise" className="relative w-fit"><BrandLockup /></a>
+          <div className="relative max-w-xl">
+            <PointMark className="mb-10 h-14 w-14" />
+            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[#626b5f]">Your creative home</p>
+            <h1 className="mt-6 text-5xl font-medium leading-[0.98] tracking-[-0.055em] xl:text-7xl">Return to the work that matters.</h1>
+            <p className="mt-7 max-w-md text-lg leading-8 text-[#50574e]">Your ideas, creative memory, source material, and projects stay connected—ready when you are.</p>
+          </div>
+          <p className="relative max-w-sm text-sm leading-6 text-[#677064]">One thoughtful workspace from research to publishing.</p>
+        </section>
+
+        <section className="flex min-h-screen flex-col px-5 py-6 sm:px-8 lg:px-16 lg:py-10">
+          <div className="flex items-center justify-between lg:justify-end">
+            <a href="https://innkwise.com" aria-label="Visit Innkwise" className="lg:hidden"><BrandLockup compact /></a>
+            <a href="https://innkwise.com" className="text-sm text-[#686d68] transition-colors hover:text-[#0a0b0b]">Back to website</a>
           </div>
 
-          {view === "forgot" ? (
-            <form className="space-y-6" onSubmit={handleForgotSubmit}>
-              <div className="space-y-3 text-center">
-                <h1 className="text-2xl font-semibold tracking-tight text-white">
-                  Reset Your Password
-                </h1>
-                <p className="mx-auto max-w-sm text-sm leading-6 text-slate-300">
-                  Enter the email address or phone number that is associated with your account and
-                  then we will send you the instructions on how to reset your password.
-                </p>
-                <p className="mx-auto max-w-sm text-xs leading-5 text-slate-400">
-                  If you use Google to sign in, password recovery and account recovery are handled
-                  directly by Google.
-                </p>
-              </div>
+          <div className="flex flex-1 items-center justify-center py-12">
+            <div className="w-full max-w-[470px]">
+              {view === "forgot" ? (
+                <form onSubmit={handleForgotSubmit}>
+                  <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[#747974]">Account recovery</p>
+                  <h1 className="mt-5 text-4xl font-medium tracking-[-0.05em] sm:text-5xl">Find your way back.</h1>
+                  <p className="mt-4 text-lg leading-8 text-[#686d68]">Enter the email address or phone number connected to your account. We&apos;ll prepare the next step.</p>
 
-              <div className="space-y-4">
-                <input
-                  type="text"
-                  value={forgotIdentifier}
-                  onChange={(e) => {
-                    setForgotIdentifier(e.target.value);
-                    setError("");
-                    setForgotSuccess("");
-                    setDevResetLink("");
-                  }}
-                  placeholder="Enter your email or phone number"
-                  className="h-11 w-full rounded-xl border border-white/10 bg-[#11182b] px-4 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-cyan-400/50"
-                />
-
-                {error ? (
-                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-                    {error}
-                  </div>
-                ) : null}
-
-                {forgotSuccess ? (
-                  <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100">
-                    <p>{forgotSuccess}</p>
-                    {devResetLink ? (
-                      <a
-                        href={devResetLink}
-                        className="mt-3 inline-block break-all font-medium text-cyan-200 underline underline-offset-4 hover:text-white"
-                      >
-                        {devResetLink}
-                      </a>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="h-11 w-full rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 text-sm font-semibold text-slate-950 transition hover:from-cyan-300 hover:to-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {loading ? "Sending..." : "Continue"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setView("auth");
-                    setError("");
-                    setForgotSuccess("");
-                    setDevResetLink("");
-                  }}
-                  className="h-11 w-full rounded-full border border-cyan-300/20 bg-[#1a2440] text-sm font-semibold text-cyan-100 transition hover:bg-[#243056]"
-                >
-                  Return to Sign In
-                </button>
-              </div>
-            </form>
-          ) : (
-            <>
-              <form className="mt-3 space-y-4" onSubmit={handleAuthSubmit}>
-                <button
-                  type="button"
-                  onClick={handleGoogleSignIn}
-                  disabled={!googleEnabled || googleLoading}
-                  className="flex h-11 w-full items-center justify-center gap-2.5 rounded-full border border-white/10 bg-[#11182b] px-4 text-sm font-semibold text-white transition hover:border-cyan-400/40 hover:bg-[#151f37] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <GoogleMark />
-                  <span>{googleButtonLabel}</span>
-                </button>
-
-                <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.22em] text-slate-500">
-                  <span className="h-px flex-1 bg-white/10" />
-                  <span>Or continue with password</span>
-                  <span className="h-px flex-1 bg-white/10" />
-                </div>
-
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium text-white">
-                    {identifierLabel}
-                  </span>
-                  <input
-                    type="text"
-                    value={identifier}
-                    onChange={(e) => {
-                      setIdentifier(e.target.value);
-                      setError("");
-                      setAuthSuccess("");
-                    }}
-                    placeholder={identifierPlaceholder}
-                    className="h-11 w-full rounded-xl border border-white/10 bg-[#11182b] px-4 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-cyan-400/50"
-                  />
-                </label>
-
-                <div className="space-y-2">
-                  <span className="block text-sm font-medium text-white">
-                    Password
-                  </span>
-                  <div className="relative">
+                  <label className="mt-9 block text-sm font-medium">
+                    Email or phone number
                     <input
-                      type={showPassword ? "text" : "password"}
-                      value={password}
+                      required
+                      type="text"
+                      autoComplete="username"
+                      value={forgotIdentifier}
                       onChange={(e) => {
-                        setPassword(e.target.value);
+                        setForgotIdentifier(e.target.value);
                         setError("");
-                        setAuthSuccess("");
+                        setForgotSuccess("");
+                        setDevResetLink("");
                       }}
-                      placeholder={passwordPlaceholder}
-                      className="h-11 w-full rounded-xl border border-white/10 bg-[#11182b] px-4 pr-12 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-cyan-400/50"
+                      placeholder="you@example.com"
+                      className={`${fieldClass} mt-2`}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((current) => !current)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 transition hover:text-cyan-300"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                    >
-                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                  </div>
-                </div>
+                  </label>
 
-                <div className="flex justify-end gap-4 text-sm text-slate-400">
+                  {error ? <div role="alert" className="mt-5 rounded-xl border border-[#9f4b45]/25 bg-[#f1d9d6] px-4 py-3 text-sm text-[#71352f]">{error}</div> : null}
+                  {forgotSuccess ? (
+                    <div role="status" className="mt-5 rounded-xl border border-[#71806d]/25 bg-[#d4ddcf]/70 px-4 py-3 text-sm text-[#354032]">
+                      <p>{forgotSuccess}</p>
+                      {devResetLink ? <a href={devResetLink} className="mt-3 inline-block break-all font-medium underline underline-offset-4">Open development reset link</a> : null}
+                    </div>
+                  ) : null}
+
+                  <button type="submit" disabled={loading} className="group mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-full bg-[#0a0b0b] px-6 text-sm font-medium text-[#f1efe9] transition-colors hover:bg-[#282b28] disabled:cursor-wait disabled:opacity-50">
+                    {loading ? "Sending instructions..." : "Continue"}<ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
-                      setView("forgot");
+                      setView("auth");
                       setError("");
-                      setAuthSuccess("");
                       setForgotSuccess("");
                       setDevResetLink("");
                     }}
-                    className="shrink-0 font-medium text-cyan-300 transition hover:text-cyan-200"
+                    className="mt-3 h-14 w-full rounded-full border border-black/[0.12] text-sm font-medium text-[#555a55] hover:bg-white/45 hover:text-[#0a0b0b]"
                   >
-                    Forgot password?
+                    Return to sign in
                   </button>
-                </div>
+                  <p className="mt-6 text-center text-xs leading-5 text-[#7b807a]">Google account recovery is handled directly by Google.</p>
+                </form>
+              ) : (
+                <>
+                  <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[#747974]">Secure access</p>
+                  <h1 className="mt-5 text-4xl font-medium tracking-[-0.05em] sm:text-5xl">{accessMode === "signin" ? "Welcome back." : "Begin with an idea."}</h1>
+                  <p className="mt-4 text-lg leading-8 text-[#686d68]">{accessMode === "signin" ? "Sign in to continue your creative practice." : "Create your Innkwise account and give your ideas one intelligent home."}</p>
 
-                {error ? (
-                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-                    {error}
+                  <div className="mt-8 grid grid-cols-2 rounded-full border border-black/[0.1] p-1">
+                    <button type="button" onClick={() => setAccessMode("signin")} className={`rounded-full px-4 py-2.5 text-sm transition-colors ${accessMode === "signin" ? "bg-[#0a0b0b] text-[#f1efe9]" : "text-[#686d68] hover:text-[#0a0b0b]"}`}>Sign in</button>
+                    <button type="button" onClick={() => setAccessMode("signup")} className={`rounded-full px-4 py-2.5 text-sm transition-colors ${accessMode === "signup" ? "bg-[#0a0b0b] text-[#f1efe9]" : "text-[#686d68] hover:text-[#0a0b0b]"}`}>Create account</button>
                   </div>
-                ) : null}
 
-                {authSuccess ? (
-                  <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100">
-                    {authSuccess}
-                  </div>
-                ) : null}
+                  <form className="mt-7 space-y-5" onSubmit={handleAuthSubmit}>
+                    <button type="button" onClick={handleGoogleSignIn} disabled={!googleEnabled || googleLoading} className="flex h-14 w-full items-center justify-center gap-3 rounded-full border border-black/[0.12] bg-white/35 px-5 text-sm font-medium transition-colors hover:bg-white/70 disabled:cursor-not-allowed disabled:opacity-50">
+                      <GoogleMark />
+                      <span>{googleButtonLabel}</span>
+                    </button>
 
-                <button
-                  type="submit"
-                  disabled={loading || !identifier.trim() || password.trim().length < 6}
-                  className="h-11 w-full rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 text-sm font-semibold text-slate-950 transition hover:from-cyan-300 hover:to-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {buttonLabel}
-                </button>
+                    <div className="flex items-center gap-4"><span className="h-px flex-1 bg-black/[0.09]" /><span className="text-[10px] uppercase tracking-[0.14em] text-[#8b908a]">or use password</span><span className="h-px flex-1 bg-black/[0.09]" /></div>
 
-                <p className="text-center text-sm text-cyan-300">
-                  {accessMode === "signin" ? "Don't Have An Account? " : "Already Have An Account? "}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAccessMode((current) => (current === "signin" ? "signup" : "signin"));
-                      setError("");
-                      setAuthSuccess("");
-                      setPassword("");
-                    }}
-                    className="font-medium underline underline-offset-4 hover:text-cyan-200"
-                  >
-                    {accessMode === "signin" ? "Sign Up" : "Sign In"}
-                  </button>
-                </p>
-              </form>
-            </>
-          )}
-        </div>
+                    <label className="block text-sm font-medium">
+                      {identifierLabel}
+                      <input required type="text" autoComplete="username" value={identifier} onChange={(e) => { setIdentifier(e.target.value); setError(""); setAuthSuccess(""); }} placeholder={identifierPlaceholder} className={`${fieldClass} mt-2`} />
+                    </label>
+
+                    <label className="block text-sm font-medium">
+                      Password
+                      <span className="relative mt-2 block">
+                        <input required minLength={6} type={showPassword ? "text" : "password"} autoComplete={accessMode === "signin" ? "current-password" : "new-password"} value={password} onChange={(e) => { setPassword(e.target.value); setError(""); setAuthSuccess(""); }} placeholder={passwordPlaceholder} className={`${fieldClass} pr-12`} />
+                        <button type="button" onClick={() => setShowPassword((current) => !current)} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#747974] hover:text-[#0a0b0b]" aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+                      </span>
+                    </label>
+
+                    {accessMode === "signin" ? (
+                      <div className="flex justify-end"><button type="button" onClick={() => { setView("forgot"); setError(""); setAuthSuccess(""); setForgotSuccess(""); setDevResetLink(""); }} className="text-sm text-[#555a55] hover:text-[#0a0b0b]">Forgot password?</button></div>
+                    ) : null}
+
+                    {error ? <div role="alert" className="rounded-xl border border-[#9f4b45]/25 bg-[#f1d9d6] px-4 py-3 text-sm text-[#71352f]">{error}</div> : null}
+                    {authSuccess ? <div role="status" className="rounded-xl border border-[#71806d]/25 bg-[#d4ddcf]/70 px-4 py-3 text-sm text-[#354032]">{authSuccess}</div> : null}
+
+                    <button type="submit" disabled={loading || !identifier.trim() || password.trim().length < 6} className="group flex h-14 w-full items-center justify-center gap-2 rounded-full bg-[#0a0b0b] px-6 text-sm font-medium text-[#f1efe9] transition-colors hover:bg-[#282b28] disabled:cursor-wait disabled:opacity-50">
+                      {buttonLabel}<ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                    </button>
+                  </form>
+
+                  <p className="mt-6 flex items-center justify-center gap-2 text-center text-xs leading-5 text-[#7b807a]"><LockKeyhole className="h-3.5 w-3.5" />Your account stays private and secure.</p>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-center gap-5 text-xs text-[#7b807a]">
+            <a href="https://innkwise.com/privacy" className="hover:text-[#0a0b0b]">Privacy</a>
+            <a href="https://innkwise.com/terms" className="hover:text-[#0a0b0b]">Terms</a>
+            <a href="https://innkwise.com/contact" className="hover:text-[#0a0b0b]">Contact</a>
+          </div>
+        </section>
       </div>
     </main>
   );

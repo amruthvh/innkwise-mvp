@@ -6,6 +6,7 @@ import { Check, Loader2, Minus } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { getAuthHeaders, getStoredAuthToken, storeAuthToken } from "@/frontend/auth/auth-token-storage";
 import { useSubscription } from "@/frontend/hooks/use-subscription";
+import { BrandLockup } from "@/frontend/components/innkwise-brand";
 import type { PublicPricing } from "@/shared/types/billing";
 
 const freeFeatures = [
@@ -307,10 +308,7 @@ export default function PricingPage() {
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-12">
         <header className="flex flex-col items-center gap-8 border-b border-[var(--app-border)] pb-10 text-center">
           <div className="space-y-5">
-            <a href="/" className="inline-flex items-center gap-2 text-sm font-semibold" aria-label="Go to Innkwise home">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)]">IW</span>
-              Innkwise
-            </a>
+            <a href="/" aria-label="Go to Innkwise home"><BrandLockup /></a>
           </div>
 
           <div className="w-full max-w-xl rounded-xl border border-[var(--app-border)] bg-[var(--app-surface)] p-6 text-sm text-[var(--app-text-muted)] shadow-[0_18px_60px_rgba(0,0,0,0.08)]">

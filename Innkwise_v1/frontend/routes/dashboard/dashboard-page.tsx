@@ -42,6 +42,7 @@ import {
   X
 } from "lucide-react";
 import { useThemePreference, type ThemePreference } from "@/frontend/components/app-providers";
+import { BrandLockup, PointMark } from "@/frontend/components/innkwise-brand";
 import { useSubscription } from "@/frontend/hooks/use-subscription";
 import {
   WorkflowRenderer,
@@ -1527,7 +1528,7 @@ function WorkspaceSidebar({
     >
       <div className="flex h-full flex-col">
         <div className={`mb-6 flex items-center ${collapsed ? "justify-center" : "justify-between"}`}>
-          {!collapsed && <div className="text-lg font-semibold">innkwise</div>}
+          {!collapsed ? <BrandLockup compact /> : <PointMark className="h-8 w-8" title="Innkwise" />}
           <button
             type="button"
             onClick={onCollapse}
@@ -4170,7 +4171,7 @@ function ModalFrame({ title, children, onClose }: { title: string; children: Rea
 function MobileTopBar() {
   return (
     <div className="mb-4 flex items-center justify-between rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)] p-3 md:hidden">
-      <div className="font-semibold">innkwise</div>
+      <BrandLockup compact />
       <div className="text-xs text-[var(--app-muted)]">Workspace</div>
     </div>
   );
