@@ -2,6 +2,7 @@ import type { NextApiResponse } from "next";
 import { aiGateway } from "@/lib/ai/gateway/AIGateway";
 import { withApiAuth, type AuthenticatedApiRequest } from "@/lib/auth/auth-middleware";
 import { isRateLimitError } from "@/lib/rate-limit/RateLimitErrors";
+import { tokenBudgetEngine } from "@/lib/context/token-budget-engine";
 
 const HF_IMAGE_MODEL = "stabilityai/stable-diffusion-2";
 
@@ -111,7 +112,10 @@ Topic: ${topic}
       workflowType: "production",
       prompt: topic,
       finalPrompt: ideaPrompt,
-      maxTokens: 600,
+      maxTokens: tokenBudgetEngine.getOutputTokenBudget({
+        workflow: "production",
+        workflowId: "generate-thumbnail"
+      }),
       temperature: 0.8,
       metadata: {
         source: "generate-thumbnail",

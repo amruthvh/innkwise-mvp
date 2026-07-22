@@ -98,6 +98,48 @@ Handled Lemon Squeezy events:
 
 Pricing is selected on the backend from `x-vercel-ip-country`. India receives INR plans, all other countries fall back to Global pricing. Founding Creator closes automatically when `pricing_cohorts.claimed_slots` reaches `max_slots`.
 
+## AI Provider
+
+Innkwise routes all generation through the AI Gateway. To use Kimi K2 through OpenRouter, set:
+
+```bash
+AI_PRIMARY_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-v1-your-key
+OPENROUTER_MODEL=moonshotai/kimi-k2
+OPENROUTER_MAX_TOKENS=2600
+OPENROUTER_REQUEST_TIMEOUT_MS=30000
+OPENROUTER_SITE_URL=https://your-domain.com
+OPENROUTER_APP_NAME=Innkwise
+```
+
+OpenRouter uses an OpenAI-compatible chat completions endpoint, so no workflow code should call a model directly. The legacy Hugging Face route remains available by setting:
+
+```bash
+AI_PRIMARY_PROVIDER=huggingface
+HF_API_TOKEN=your-hugging-face-token
+HF_MODEL=meta-llama/Llama-3.1-8B-Instruct
+```
+
+## AI Token Budgets
+
+The AI Gateway uses the Token Budget Engine to keep prompts economical while preserving enough context for quality. `OPENROUTER_MAX_TOKENS` and `HF_MAX_TOKENS` are provider-level ceilings; normal requests use these workflow budgets:
+
+| Workflow | Context tokens | Output tokens |
+| --- | ---: | ---: |
+| Creator Chat | 800 | 700 |
+| Research | 2000 | 1400 |
+| Content Strategy | 1400 | 1200 |
+| Long-form Script | 1800 | 1800 |
+| 1 min Short Script | 700 | 700 |
+| 2 min Short Script | 900 | 1000 |
+| 3 min Short Script | 1100 | 1300 |
+| Production Kit | 1000 | 1000 |
+| Posting Strategy | 800 | 800 |
+| Thumbnail | 600 | 500 |
+| Hook Regeneration | 500 | 400 |
+
+Context is ranked before prompting, then compressed in priority order: user request, workflow instructions, creator preferences, durable memories, relevant knowledge, and recent conversation signals.
+
 ## Backend Smoke Test
 
 For UI wiring without JWT/DB/LLM services, set:

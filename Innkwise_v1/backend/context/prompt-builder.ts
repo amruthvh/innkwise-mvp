@@ -1,10 +1,10 @@
 import type {
   ContextAssembly,
-  ContextConversation,
-  ContextCreatorProfile,
-  ContextKnowledgeSource,
   ContextWorkflow
 } from "@/backend/context/context-engine";
+import { contextCompressionEngine } from "@/lib/context/context-compression-engine";
+import { contextRankingEngine } from "@/lib/context/context-ranking-engine";
+import { tokenBudgetEngine } from "@/lib/context/token-budget-engine";
 
 export type LlmPromptMessage = {
   role: "system" | "user";
@@ -62,122 +62,14 @@ const workflowSystemPrompts: Record<ContextWorkflow, string> = {
   ].join("\n")
 };
 
-function compactJson(value: unknown, maxChars = 900) {
-  const text = JSON.stringify(value ?? {});
-  if (!text || text === "{}" || text === "[]") return "";
-  return text.length > maxChars ? `${text.slice(0, maxChars).trim()}...` : text;
-}
-
-function truncateText(value: unknown, maxChars = 900) {
-  if (typeof value !== "string") return "";
-  const trimmed = value.replace(/\s+/g, " ").trim();
-  if (!trimmed) return "";
-  return trimmed.length > maxChars ? `${trimmed.slice(0, maxChars).trim()}...` : trimmed;
-}
-
-function formatLine(label: string, value: unknown) {
-  const text = Array.isArray(value)
-    ? value.filter(Boolean).join(", ")
-    : typeof value === "object"
-      ? compactJson(value)
-      : truncateText(String(value ?? ""));
-
-  return text && text !== "Not set" ? `${label}: ${text}` : "";
-}
-
-function formatCreatorProfile(profile: ContextCreatorProfile | null) {
-  if (!profile) {
-    return "No creator profile is available yet.";
-  }
-
-  return [
-    formatLine("Creator name", profile.creatorName),
-    formatLine("Brand name", profile.brandName),
-    formatLine("Tagline", profile.tagline),
-    formatLine("Bio", profile.bio),
-    formatLine("Experience level", profile.experienceLevel),
-    formatLine("Archetypes", profile.archetypes),
-    formatLine("Goals", profile.goals),
-    formatLine("Niche", profile.niche),
-    formatLine("Audience", profile.audience),
-    formatLine("Platform preferences", profile.platformPreferences),
-    formatLine("Writing preferences", profile.writingPreferences),
-    formatLine("AI controls", profile.aiControls)
-  ].filter(Boolean).join("\n") || "Creator profile exists but has no filled fields yet.";
-}
-
-function formatKnowledgeSource(source: ContextKnowledgeSource, index: number) {
-  return [
-    `[${index + 1}] ${source.title}`,
-    `Type: ${source.sourceType}`,
-    source.url ? `URL: ${source.url}` : "",
-    source.tags.length ? `Tags: ${source.tags.join(", ")}` : "",
-    source.summary ? `Summary: ${truncateText(source.summary, 500)}` : "",
-    source.extractedTextSnippet ? `Extracted text: ${truncateText(source.extractedTextSnippet, 800)}` : ""
-  ].filter(Boolean).join("\n");
-}
-
-function formatKnowledgeSources(sources: ContextKnowledgeSource[]) {
-  if (!sources.length) {
-    return "No knowledge sources were assembled.";
-  }
-
-  return sources.map(formatKnowledgeSource).join("\n\n");
-}
-
-function formatConversation(conversation: ContextConversation, index: number) {
-  const messages = conversation.recentMessages.length
-    ? conversation.recentMessages
-        .map((message) => `- ${message.role}: ${truncateText(message.content ?? compactJson(message.contentJson, 500), 700)}`)
-        .join("\n")
-    : "No recent messages available.";
-
-  return [
-    `[${index + 1}] ${conversation.title ?? "Untitled conversation"}`,
-    `Recent messages:`,
-    messages
-  ].join("\n");
-}
-
-function formatRecentConversations(conversations: ContextConversation[]) {
-  if (!conversations.length) {
-    return "No recent conversations were assembled.";
-  }
-
-  return conversations.map(formatConversation).join("\n\n");
-}
-
-function formatMemorySummary(context: ContextAssembly) {
-  if (!context.memorySummary.available) {
-    return "No durable creator memories are stored yet.";
-  }
-
-  return [
-    `Confidence: ${context.memorySummary.confidence ?? "Not scored"}`,
-    `Last detection: ${context.memorySummary.lastDetectionAt ?? "Unknown"}`,
-    `Categories: ${context.memorySummary.categories.length ? context.memorySummary.categories.join(", ") : "None"}`,
-    `Durable facts: ${compactJson(context.memorySummary.durableFacts, 1200)}`
-  ].filter(Boolean).join("\n");
-}
-
 export function buildContextPrompt(context: ContextAssembly) {
-  return [
-    "# Innkwise Context",
-    `Workflow: ${context.workflow}`,
-    `Topic: ${context.topic ?? "Not provided"}`,
-    "",
-    "## Creator Profile",
-    formatCreatorProfile(context.creatorProfile),
-    "",
-    "## Relevant Knowledge Sources",
-    formatKnowledgeSources(context.relevantKnowledgeSources),
-    "",
-    "## Recent Conversations",
-    formatRecentConversations(context.recentConversations),
-    "",
-    "## Memory Summary",
-    formatMemorySummary(context)
-  ].join("\n");
+  const budget = tokenBudgetEngine.getBudget({
+    workflow: context.workflow,
+    requestedAssetType: context.requestedAssetType,
+    metadata: context.metadata
+  });
+  const ranked = contextRankingEngine.rank(context);
+  return contextCompressionEngine.compress(context, ranked, budget).prompt;
 }
 
 export function buildUserPrompt(context: ContextAssembly, userInstruction?: string) {

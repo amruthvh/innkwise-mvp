@@ -3,6 +3,7 @@ import { buildRewritePrompt } from "@/llm-rag/prompts/script-prompts";
 import { aiGateway } from "@/lib/ai/gateway/AIGateway";
 import { withApiAuth, type AuthenticatedApiRequest } from "@/lib/auth/auth-middleware";
 import { isRateLimitError } from "@/lib/rate-limit/RateLimitErrors";
+import { tokenBudgetEngine } from "@/lib/context/token-budget-engine";
 
 type Body = {
   section: string;
@@ -122,7 +123,10 @@ Rules:
       workflowType: "script",
       prompt: req.body.existingText,
       finalPrompt: prompt,
-      maxTokens: 1200,
+      maxTokens: tokenBudgetEngine.getOutputTokenBudget({
+        workflow: "script",
+        workflowId: "rewrite-section"
+      }),
       temperature: 0.7,
       metadata: {
         source: "rewrite-section",

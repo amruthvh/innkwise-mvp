@@ -2,6 +2,7 @@ import type { NextApiResponse } from "next";
 import { aiGateway } from "@/lib/ai/gateway/AIGateway";
 import { withApiAuth, type AuthenticatedApiRequest } from "@/lib/auth/auth-middleware";
 import { isRateLimitError } from "@/lib/rate-limit/RateLimitErrors";
+import { tokenBudgetEngine } from "@/lib/context/token-budget-engine";
 
 type Body = {
   topic: string;
@@ -89,7 +90,10 @@ Tone: ${req.body.tone}
       workflowType: "script",
       prompt: req.body.topic,
       finalPrompt: prompt,
-      maxTokens: 400,
+      maxTokens: tokenBudgetEngine.getOutputTokenBudget({
+        workflow: "script",
+        workflowId: "regenerate-hooks"
+      }),
       temperature: 0.8,
       metadata: {
         source: "regenerate-hooks",

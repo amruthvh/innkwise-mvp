@@ -11,6 +11,7 @@ import { isRateLimitError } from "@/lib/rate-limit/RateLimitErrors";
 import type { RateLimitOperation } from "@/lib/rate-limit/PlanLimits";
 import { inputValidator } from "@/lib/validation/InputValidator";
 import { isInputValidationError } from "@/lib/validation/ValidationErrors";
+import { tokenBudgetEngine } from "@/lib/context/token-budget-engine";
 import type {
   AIGatewayExecuteInput,
   AIModelProvider,
@@ -33,6 +34,20 @@ function operationForWorkflow(workflowType: AIGatewayExecuteInput["workflowType"
   if (workflowType === "production") return "production_generation";
   if (workflowType === "distribution") return "posting_generation";
   return "chat_generation";
+}
+
+function resolveGatewayMaxTokens(input: {
+  workflowType: AIGatewayExecuteInput["workflowType"];
+  maxTokens?: number;
+  metadata?: JsonObject;
+}) {
+  return input.maxTokens ?? tokenBudgetEngine.getOutputTokenBudget({
+    workflow: input.workflowType,
+    workflowId: typeof input.metadata?.workflowId === "string" ? input.metadata.workflowId : null,
+    videoType: typeof input.metadata?.videoType === "string" ? input.metadata.videoType : null,
+    length: typeof input.metadata?.length === "number" ? input.metadata.length : null,
+    metadata: input.metadata
+  });
 }
 
 function logGatewayEvent(event: string, data: Record<string, unknown>) {
@@ -257,6 +272,7 @@ export class AIGateway {
         promptGuard.assertSafe(input.prompt);
       }
       const skipOutputValidation = input.metadata?.gatewaySkipOutputValidation === true;
+      const maxTokens = resolveGatewayMaxTokens(input);
       let providerAttempt = 0;
 
       const result = await (timing
@@ -275,7 +291,7 @@ export class AIGateway {
           request: {
             prompt: input.finalPrompt,
             workflowType: input.workflowType,
-            maxTokens: input.maxTokens,
+            maxTokens,
             temperature: input.temperature
           },
           shouldRetry: (response, retryCount) => {
@@ -302,7 +318,7 @@ export class AIGateway {
           ].filter(Boolean).join("\n")
         }), {
           workflow: input.workflowType,
-          maxTokens: input.maxTokens ?? null
+          maxTokens
         })
         : retryManager.run({
         provider: {
@@ -312,7 +328,7 @@ export class AIGateway {
         request: {
           prompt: input.finalPrompt,
           workflowType: input.workflowType,
-          maxTokens: input.maxTokens,
+          maxTokens,
           temperature: input.temperature
         },
         shouldRetry: (response) => {

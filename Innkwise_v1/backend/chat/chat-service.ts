@@ -28,6 +28,7 @@ import { getAuthenticatedUser } from "@/lib/auth/auth";
 import { toCreatorUserId } from "@/backend/auth/identifiers";
 import { aiGateway } from "@/lib/ai/gateway/AIGateway";
 import { contextResolver } from "@/lib/context/context-resolver";
+import { tokenBudgetEngine } from "@/lib/context/token-budget-engine";
 import type { TimingTracker } from "@/lib/observability/timing";
 import { inputValidator } from "@/lib/validation/InputValidator";
 import type { GeneratedAssetType, JsonObject, Message } from "@/shared/types/creator-os";
@@ -95,9 +96,6 @@ export type GenerateChatCompletionInput = StartChatTurnInput & {
   maxTokens?: number;
   temperature?: number;
 };
-
-const DEFAULT_KNOWLEDGE_SOURCE_LIMIT = 5;
-const DEFAULT_MESSAGES_PER_CONVERSATION = 10;
 
 function conversationTitle(message: string) {
   const cleaned = message
@@ -360,6 +358,12 @@ export class ChatService {
         }));
     }
 
+    const budget = tokenBudgetEngine.getBudget({
+      workflow,
+      requestedAssetType: input.requestedAssetType,
+      metadata: input.metadata
+    });
+
     const context = await (timing
       ? timing.time("chat.build_context_assembly", () => buildContextAssembly({
         userId,
@@ -368,11 +372,13 @@ export class ChatService {
         topic: combinedMessage,
         requestedAssetType: input.requestedAssetType,
         selectedKnowledgeSourceIds: input.selectedKnowledgeSourceIds,
-        knowledgeSourceLimit: DEFAULT_KNOWLEDGE_SOURCE_LIMIT,
-        conversationLimit: 1,
-        messagesPerConversation: DEFAULT_MESSAGES_PER_CONVERSATION,
+        knowledgeSourceLimit: budget.knowledgeSourceLimit,
+        conversationLimit: budget.conversationLimit,
+        messagesPerConversation: budget.messagesPerConversation,
+        extractedTextSnippetChars: budget.snippetChars,
         metadata: {
           ...(input.metadata ?? {}),
+          tokenBudget: budget as unknown as JsonObject,
           userMessageId: userMessage.id,
           memoryDetection: memoryDetection as unknown as JsonObject,
           clarificationContext: evaluation.availableContext as unknown as JsonObject,
@@ -391,11 +397,13 @@ export class ChatService {
         topic: combinedMessage,
         requestedAssetType: input.requestedAssetType,
         selectedKnowledgeSourceIds: input.selectedKnowledgeSourceIds,
-        knowledgeSourceLimit: DEFAULT_KNOWLEDGE_SOURCE_LIMIT,
-        conversationLimit: 1,
-        messagesPerConversation: DEFAULT_MESSAGES_PER_CONVERSATION,
+        knowledgeSourceLimit: budget.knowledgeSourceLimit,
+        conversationLimit: budget.conversationLimit,
+        messagesPerConversation: budget.messagesPerConversation,
+        extractedTextSnippetChars: budget.snippetChars,
         metadata: {
           ...(input.metadata ?? {}),
+          tokenBudget: budget as unknown as JsonObject,
           userMessageId: userMessage.id,
           memoryDetection: memoryDetection as unknown as JsonObject,
           clarificationContext: evaluation.availableContext as unknown as JsonObject,

@@ -11,6 +11,7 @@ import { withApiAuth, type AuthenticatedApiRequest } from "@/lib/auth/auth-middl
 import { verifyConversationOwnership } from "@/lib/auth/authorization";
 import { isApiError } from "@/lib/auth/errors";
 import { GatewayError } from "@/lib/ai/gateway/GatewayErrors";
+import { tokenBudgetEngine } from "@/lib/context/token-budget-engine";
 import { TimingTracker } from "@/lib/observability/timing";
 import { responseFormatter } from "@/lib/formatting/response-formatter";
 import { isRateLimitError } from "@/lib/rate-limit/RateLimitErrors";
@@ -257,6 +258,22 @@ function cleanAssistantMarkdown(text: string): string {
     .trim();
 }
 
+function tryParseJsonObjectFromText(text: string): unknown | null {
+  const jsonStart = text.indexOf("{");
+  const jsonEnd = text.lastIndexOf("}") + 1;
+  if (jsonStart === -1 || jsonEnd <= jsonStart) return null;
+
+  try {
+    return JSON.parse(cleanJsonString(text.slice(jsonStart, jsonEnd)));
+  } catch {
+    return null;
+  }
+}
+
+function hasWorkflowJsonText(value: string) {
+  return /"workflow_output"|"workflow_id"|"workflow_title"/i.test(value);
+}
+
 function toStringList(value: unknown): string[] {
   const unwrapStructuredString = (raw: string): string => {
     const trimmed = raw.trim();
@@ -365,14 +382,26 @@ function normalizeShorts(input: unknown): ShortsScript {
 
 function normalizeWorkflowOutput(input: unknown, template: ReturnType<typeof getWorkflowTemplate>): WorkflowOutput {
   const data = (input ?? {}) as Record<string, unknown>;
+  if (!data.workflow_output && typeof input === "string" && hasWorkflowJsonText(input)) {
+    const embedded = tryParseJsonObjectFromText(input);
+    if (embedded) return normalizeWorkflowOutput(embedded, template);
+  }
+
   const rawOutput = (data.workflow_output ?? data) as Record<string, unknown>;
-  const summary = String(rawOutput.summary ?? "");
+  const rawSummary = String(rawOutput.summary ?? "");
+  if (hasWorkflowJsonText(rawSummary)) {
+    const embedded = tryParseJsonObjectFromText(rawSummary);
+    if (embedded) return normalizeWorkflowOutput(embedded, template);
+  }
+
+  const summary = cleanAssistantMarkdown(rawSummary);
   const rawSections = Array.isArray(rawOutput.sections) ? rawOutput.sections : [];
   const sections = rawSections.map((item, index) => {
     const row = (item ?? {}) as Record<string, unknown>;
+    const content = cleanAssistantMarkdown(String(row.content ?? ""));
     return {
       title: String(row.title ?? template.outputStructure[index] ?? `Section ${index + 1}`),
-      content: String(row.content ?? ""),
+      content: hasWorkflowJsonText(content) ? "" : content,
       items: Array.isArray(row.items) ? row.items.map((entry) => String(entry ?? "")).filter(Boolean) : undefined
     };
   }).filter((section) => section.title.trim() || section.content.trim() || section.items?.length);
@@ -475,6 +504,10 @@ async function parseOrRepairWorkflowOutput(rawText: string, template: ReturnType
     const candidate = cleanJsonString(extractJsonBlock(rawText));
     return normalizeWorkflowOutput(JSON.parse(candidate), template);
   } catch {
+    if (hasWorkflowJsonText(rawText)) {
+      const embedded = tryParseJsonObjectFromText(rawText);
+      if (embedded) return normalizeWorkflowOutput(embedded, template);
+    }
     return normalizeWorkflowOutput(markdownToWorkflowOutput(rawText, template), template);
   }
 }
@@ -485,6 +518,10 @@ function markdownToWorkflowOutput(rawText: string, template: ReturnType<typeof g
     .replace(/```$/i, "")
     .replace(/\r\n/g, "\n")
     .trim();
+  if (hasWorkflowJsonText(cleaned)) {
+    const embedded = tryParseJsonObjectFromText(cleaned);
+    if (embedded) return normalizeWorkflowOutput(embedded, template);
+  }
   const blocks = cleaned
     .split(/\n(?=#{1,3}\s+)/g)
     .map((block) => block.trim())
@@ -643,6 +680,14 @@ async function handler(req: AuthenticatedApiRequest, res: NextApiResponse) {
       includeResearch: Boolean(req.body.includeResearch),
       includeCaseStudy: Boolean(req.body.includeCaseStudy)
     };
+    const workflowTokenBudget = tokenBudgetEngine.getBudget({
+      workflow: workflowTemplate.workflowType,
+      workflowId: workflowTemplate.id,
+      requestedAssetType: workflowTemplate.id === "generate-script" ? "script" : "other",
+      videoType: req.body.videoType ?? "long",
+      length: req.body.length,
+      metadata: workflowMetadata
+    });
 
     if (process.env.MOCK_GENERATE_SCRIPT === "true") {
       const turn = await chatService.startTurn({
@@ -902,11 +947,7 @@ ${isCreatorChat ? "- Keep Creator Chat responses natural and flexible. Put a sim
         requestedAssetType: "other",
         metadata: workflowMetadata,
         responseInstructions,
-        maxTokens: workflowTemplate.id === "creator-chat"
-          ? 1100
-          : workflowTemplate.id === "research-topic"
-            ? 2200
-            : 2000,
+        maxTokens: workflowTokenBudget.maxOutputTokens,
         timing
       });
       if (generation.kind === "clarification") {
@@ -996,7 +1037,7 @@ ${buildContentToggleRules(req.body.includeResearch, req.body.includeCaseStudy)}
         requestedAssetType: "script",
         metadata: workflowMetadata,
         responseInstructions,
-        maxTokens: shortsDuration === 1 ? 800 : shortsDuration === 2 ? 1100 : 1400,
+        maxTokens: workflowTokenBudget.maxOutputTokens,
         timing
       });
       if (generation.kind === "clarification") {
@@ -1092,7 +1133,7 @@ ${timeline}
       requestedAssetType: "script",
       metadata: workflowMetadata,
       responseInstructions,
-      maxTokens: 2600,
+      maxTokens: workflowTokenBudget.maxOutputTokens,
       timing
     });
     if (generation.kind === "clarification") {

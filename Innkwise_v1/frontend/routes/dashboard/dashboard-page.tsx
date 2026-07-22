@@ -328,9 +328,10 @@ const longFormDurations = [5, 8, 12, 15];
 const shortsDurations = [1, 2, 3];
 const thinkingStages = [
   "Understanding your request",
-  "Checking creator context",
-  "Looking for relevant knowledge",
-  "Choosing the best response shape",
+  "Finding the strongest creator signals",
+  "Ranking relevant memories",
+  "Checking useful knowledge sources",
+  "Compressing context for the model",
   "Drafting the answer",
   "Polishing for readability"
 ];

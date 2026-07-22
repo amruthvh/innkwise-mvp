@@ -79,6 +79,18 @@ function toStrings(value: unknown): string[] {
 
 function cleanGeneratedText(value: string): string {
   const trimmed = value.trim();
+  if (/"workflow_output"|"workflow_id"|"workflow_title"/i.test(trimmed)) {
+    const jsonStart = trimmed.indexOf("{");
+    const jsonEnd = trimmed.lastIndexOf("}") + 1;
+    if (jsonStart !== -1 && jsonEnd > jsonStart) {
+      try {
+        return meaningfulText(JSON.parse(trimmed.slice(jsonStart, jsonEnd)));
+      } catch {
+        // Fall through to line-level cleanup.
+      }
+    }
+  }
+
   if (
     (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
     (trimmed.startsWith("[") && trimmed.endsWith("]"))

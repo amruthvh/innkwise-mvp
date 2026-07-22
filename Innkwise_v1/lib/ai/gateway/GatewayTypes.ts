@@ -4,7 +4,7 @@ import type { TimingTracker } from "@/lib/observability/timing";
 import type { RateLimitOperation } from "@/lib/rate-limit/PlanLimits";
 import type { GeneratedAssetType, JsonObject } from "@/shared/types/creator-os";
 
-export type AIProviderName = "llama" | "openai" | "claude" | "gemini" | "deepseek";
+export type AIProviderName = "llama" | "openai" | "openrouter" | "claude" | "gemini" | "deepseek";
 
 export type GatewayAttachment = {
   id?: string;
