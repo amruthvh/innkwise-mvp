@@ -67,7 +67,8 @@ export class RateLimiter {
 
     const result = await quotaCalculator.checkQuota({
       userId: input.userId,
-      operation: input.operation
+      operation: input.operation,
+      quota
     });
 
     if (!result.allowed) {
@@ -88,6 +89,7 @@ export class RateLimiter {
     operation: RateLimitOperation;
     tokenUsage?: { promptTokens: number; completionTokens: number; totalTokens: number };
     latencyMs?: number;
+    quota?: QuotaState;
   }) {
     const quota = await quotaCalculator.consumeQuota(input);
     console.info("[rate-limit] quota consumed", {

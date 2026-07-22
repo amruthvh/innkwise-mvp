@@ -9,6 +9,7 @@ import { GatewayError, PromptRejectedError, RateLimitError } from "@/lib/ai/gate
 import { rateLimiter } from "@/lib/rate-limit/RateLimiter";
 import { isRateLimitError } from "@/lib/rate-limit/RateLimitErrors";
 import type { RateLimitOperation } from "@/lib/rate-limit/PlanLimits";
+import type { QuotaState } from "@/lib/rate-limit/QuotaCalculator";
 import { inputValidator } from "@/lib/validation/InputValidator";
 import { isInputValidationError } from "@/lib/validation/ValidationErrors";
 import { tokenBudgetEngine } from "@/lib/context/token-budget-engine";
@@ -250,8 +251,9 @@ export class AIGateway {
         workflowType: validated.workflowType,
         conversationId: validated.conversationId ?? input.conversationId
       };
+      let checkedQuota: QuotaState | undefined;
       if (!input.rateLimitChecked) {
-        await (timing
+        checkedQuota = await (timing
           ? timing.time("gateway.rate_limit_check", () => rateLimiter.checkQuota({
             userId: input.userId,
             operation,
@@ -371,13 +373,15 @@ export class AIGateway {
           userId: input.userId,
           operation,
           latencyMs,
-          tokenUsage: modelResponse.tokenUsage
+          tokenUsage: modelResponse.tokenUsage,
+          quota: checkedQuota
         }), { operation })
         : rateLimiter.consumeQuota({
           userId: input.userId,
           operation,
           latencyMs,
-          tokenUsage: modelResponse.tokenUsage
+          tokenUsage: modelResponse.tokenUsage,
+          quota: checkedQuota
         }));
 
       logGatewayEvent("completed", {

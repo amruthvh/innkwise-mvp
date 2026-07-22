@@ -91,8 +91,9 @@ export class QuotaCalculator {
   async checkQuota(input: {
     userId: string;
     operation: RateLimitOperation;
+    quota?: QuotaState;
   }) {
-    const quota = await this.remainingQuota(input.userId);
+    const quota = input.quota ?? await this.remainingQuota(input.userId);
     if (quota.plan === "admin") return { allowed: true, quota };
 
     if (isGenerationOperation(input.operation)) {
@@ -124,42 +125,44 @@ export class QuotaCalculator {
     operation: RateLimitOperation;
     tokenUsage?: TokenUsage;
     latencyMs?: number;
+    quota?: QuotaState;
   }) {
-    const quota = await this.remainingQuota(input.userId);
+    const quota = input.quota ?? await this.remainingQuota(input.userId);
     if (quota.plan === "admin") return quota;
+    const increments: Array<Promise<void>> = [];
 
     if (isGenerationOperation(input.operation)) {
-      await rateLimitUsageTracker.increment({
+      increments.push(rateLimitUsageTracker.increment({
         userId: input.userId,
         metric: "ai_generation",
         count: 1,
         plan: quota.plan,
         operation: input.operation
-      });
+      }));
     }
 
     if (input.operation === "embedding_generation") {
-      await rateLimitUsageTracker.increment({
+      increments.push(rateLimitUsageTracker.increment({
         userId: input.userId,
         metric: "embedding",
         count: 1,
         plan: quota.plan,
         operation: input.operation
-      });
+      }));
     }
 
     if (input.operation === "file_upload") {
-      await rateLimitUsageTracker.increment({
+      increments.push(rateLimitUsageTracker.increment({
         userId: input.userId,
         metric: "upload",
         count: 1,
         plan: quota.plan,
         operation: input.operation
-      });
+      }));
     }
 
     if (input.tokenUsage) {
-      await Promise.all([
+      increments.push(
         rateLimitUsageTracker.increment({
           userId: input.userId,
           metric: "prompt_token",
@@ -174,20 +177,48 @@ export class QuotaCalculator {
           plan: quota.plan,
           operation: input.operation
         })
-      ]);
+      );
     }
 
     if (typeof input.latencyMs === "number" && Number.isFinite(input.latencyMs)) {
-      await rateLimitUsageTracker.increment({
+      increments.push(rateLimitUsageTracker.increment({
         userId: input.userId,
         metric: "latency_ms",
         count: Math.max(0, Math.round(input.latencyMs)),
         plan: quota.plan,
         operation: input.operation
-      });
+      }));
     }
 
-    return this.remainingQuota(input.userId);
+    await Promise.all(increments);
+
+    return {
+      ...quota,
+      usage: {
+        ...quota.usage,
+        ai_generation: quota.usage.ai_generation + (isGenerationOperation(input.operation) ? 1 : 0),
+        embedding: quota.usage.embedding + (input.operation === "embedding_generation" ? 1 : 0),
+        upload: quota.usage.upload + (input.operation === "file_upload" ? 1 : 0),
+        prompt_token: quota.usage.prompt_token + (input.tokenUsage?.promptTokens ?? 0),
+        completion_token: quota.usage.completion_token + (input.tokenUsage?.completionTokens ?? 0),
+        latency_ms: quota.usage.latency_ms + (
+          typeof input.latencyMs === "number" && Number.isFinite(input.latencyMs)
+            ? Math.max(0, Math.round(input.latencyMs))
+            : 0
+        )
+      },
+      remaining: {
+        generations: isGenerationOperation(input.operation) && quota.remaining.generations !== "unlimited"
+          ? Math.max(0, quota.remaining.generations - 1)
+          : quota.remaining.generations,
+        embeddings: input.operation === "embedding_generation" && quota.remaining.embeddings !== "unlimited"
+          ? Math.max(0, quota.remaining.embeddings - 1)
+          : quota.remaining.embeddings,
+        uploads: input.operation === "file_upload" && quota.remaining.uploads !== "unlimited"
+          ? Math.max(0, quota.remaining.uploads - 1)
+          : quota.remaining.uploads
+      }
+    };
   }
 
   resetWindow() {
